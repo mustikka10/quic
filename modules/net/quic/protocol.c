@@ -653,11 +653,11 @@ static __init int quic_init(void)
 	if (err)
 		goto err_hash;
 
-#ifdef WQ_PERCPU
-	quic_wq = alloc_workqueue("quic_workqueue", WQ_PERCPU, 0);
-#else
-	quic_wq = create_workqueue("quic_workqueue");
-#endif
+	/* Allocate an unbound reclaimable workqueue for UDP socket destruction
+	 * and backlog packet processing.
+	 */
+	quic_wq = alloc_workqueue("quic_workqueue",
+				  WQ_MEM_RECLAIM | WQ_UNBOUND, 0);
 	if (!quic_wq) {
 		err = -ENOMEM;
 		goto err_wq;
