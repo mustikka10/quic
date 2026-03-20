@@ -395,6 +395,9 @@ static void quic_crypto_done(void *data, int err)
 	struct crypto_async_request *base = data;
 	struct sk_buff *skb = data;
 
+	if (err == -EINPROGRESS)
+		return;
+
 	if (base->flags == CRYPTO_TFM_REQ_MAY_BACKLOG)
 		skb = base->data;
 
@@ -469,9 +472,9 @@ static int quic_crypto_payload_protect(struct crypto_aead *tfm, struct sk_buff *
 
 	cb->crypto_ctx = ctx; /* Set crypto_ctx for async free in quic_crypto_done(). */
 	err = enc ? crypto_aead_encrypt(req) : crypto_aead_decrypt(req);
-	if (err == -EINPROGRESS) {
+	if (err == -EINPROGRESS || err == -EBUSY) {
 		memzero_explicit(nonce, sizeof(nonce));
-		return err;
+		return -EINPROGRESS;
 	}
 
 err:
