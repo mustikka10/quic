@@ -523,7 +523,9 @@ int quic_flow_route(struct sock *sk, union quic_addr *da, union quic_addr *sa, s
 
 void quic_lower_xmit(struct sock *sk, struct sk_buff *skb, union quic_addr *da, struct flowi *fl)
 {
+	local_bh_disable();
 	quic_af_ipv4(da) ? quic_v4_lower_xmit(sk, skb, fl) : quic_v6_lower_xmit(sk, skb, fl);
+	local_bh_enable();
 }
 
 #define quic_skb_ipv4(skb)	(ip_hdr(skb)->version == 4)
