@@ -1142,8 +1142,12 @@ static int quic_wait_for_packet(struct sock *sk, struct list_head *head, u32 fla
 	return err;
 }
 
+#ifdef XMIT_RECURSION_LIMIT
+static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t msg_len, int flags)
+#else
 static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t msg_len, int flags,
 			int *addr_len)
+#endif
 {
 	u32 copy, copied = 0, freed = 0, bytes = 0;
 	struct quic_inqueue *inq = quic_inq(sk);
