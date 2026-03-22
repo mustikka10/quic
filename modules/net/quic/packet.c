@@ -80,8 +80,8 @@ static u8 quic_packet_version_put_type(u32 version, u8 type)
 }
 
 /* Parse QUIC version and connection IDs (DCID and SCID) from a Long header packet buffer. */
-static int quic_packet_get_version_and_connid(struct quic_conn_id *dcid, struct quic_conn_id *scid,
-					      u32 *version, u8 **pp, u32 *plen)
+static int quic_packet_get_long_header(struct quic_conn_id *dcid, struct quic_conn_id *scid,
+				       u32 *version, u8 **pp, u32 *plen)
 {
 	u64 len, v;
 
@@ -90,7 +90,8 @@ static int quic_packet_get_version_and_connid(struct quic_conn_id *dcid, struct 
 
 	if (!quic_get_int(pp, plen, &v, QUIC_VERSION_LEN))
 		return -EINVAL;
-	*version = v;
+	if (version)
+		*version = v;
 
 	if (!quic_get_int(pp, plen, &len, 1) ||
 	    len > *plen || len > QUIC_CONN_ID_MAX_LEN)
@@ -99,6 +100,8 @@ static int quic_packet_get_version_and_connid(struct quic_conn_id *dcid, struct 
 	*plen -= len;
 	*pp += len;
 
+	if (!scid)
+		return 0;
 	if (!quic_get_int(pp, plen, &len, 1) ||
 	    len > *plen || len > QUIC_CONN_ID_MAX_LEN)
 		return -EINVAL;
@@ -433,7 +436,7 @@ static int quic_packet_parse_alpn(struct sk_buff *skb, struct quic_data *alpn)
 
 	if (!static_branch_unlikely(&quic_alpn_demux_key))
 		return 0;
-	err = quic_packet_get_version_and_connid(&dcid, &scid, &version, &p, &len);
+	err = quic_packet_get_long_header(&dcid, &scid, &version, &p, &len);
 	if (err)
 		return err;
 	if (!quic_packet_compatible_versions(version))
@@ -482,25 +485,6 @@ static int quic_packet_parse_alpn(struct sk_buff *skb, struct quic_data *alpn)
 	return quic_packet_get_alpn(alpn, p, length);
 }
 
-/* Extract the Destination Connection ID (DCID) from a QUIC Long header packet. */
-int quic_packet_get_dcid(struct quic_conn_id *dcid, struct sk_buff *skb)
-{
-	u32 plen = skb->len;
-	u8 *p = skb->data;
-	u64 len;
-
-	if (plen < QUIC_HLEN + QUIC_VERSION_LEN)
-		return -EINVAL;
-	plen -= (QUIC_HLEN + QUIC_VERSION_LEN);
-	p += (QUIC_HLEN + QUIC_VERSION_LEN);
-
-	if (!quic_get_int(&p, &plen, &len, 1) ||
-	    len > plen || len > QUIC_CONN_ID_MAX_LEN)
-		return -EINVAL;
-	quic_conn_id_update(dcid, p, len);
-	return 0;
-}
-
 /* Lookup listening socket for Client Initial packet (in process context). */
 static struct sock *quic_packet_get_listen_sock(struct sk_buff *skb)
 {
@@ -530,6 +514,8 @@ static struct sock *quic_packet_get_sock(struct sk_buff *skb)
 	union quic_addr daddr, saddr;
 	struct quic_data alpns = {};
 	struct sock *sk = NULL;
+	u32 len = skb->len;
+	u8 *p = skb->data;
 	int err;
 
 	if (skb->len < QUIC_HLEN)
@@ -565,7 +551,7 @@ static struct sock *quic_packet_get_sock(struct sk_buff *skb)
 	}
 
 	/* Long header path. */
-	err = quic_packet_get_dcid(&dcid, skb);
+	err = quic_packet_get_long_header(&dcid, NULL, NULL, &p, &len);
 	if (err)
 		return ERR_PTR(err);
 	/* Fast path: look up QUIC connection by parsed DCID. */
@@ -938,7 +924,7 @@ static int quic_packet_listen_process(struct sock *sk, struct sk_buff *skb)
 	}
 
 	/* Read VERSION, Destination Connection ID and Source Connection ID. */
-	err = quic_packet_get_version_and_connid(&packet->dcid, &packet->scid, &version, &p, &len);
+	err = quic_packet_get_long_header(&packet->dcid, &packet->scid, &version, &p, &len);
 	if (err) {
 		QUIC_INC_STATS(net, QUIC_MIB_PKT_INVHDRDROP);
 		kfree_skb(skb);
@@ -1257,7 +1243,7 @@ static int quic_packet_handshake_header_process(struct sock *sk, struct sk_buff 
 
 	quic_packet_reset(packet); /* Reset packet state to prepare for new packet parsing. */
 	/* Read VERSION, Destination Connection ID and Source Connection ID. */
-	err = quic_packet_get_version_and_connid(&packet->dcid, &packet->scid, &version, &p, &len);
+	err = quic_packet_get_long_header(&packet->dcid, &packet->scid, &version, &p, &len);
 	if (err)
 		return err;
 	if (!version) { /* version == 0 indicates this is a version negotiation packet. */
