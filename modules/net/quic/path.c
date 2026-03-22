@@ -18,8 +18,6 @@
 #include "family.h"
 #include "path.h"
 
-extern int quic_packet_rcv(struct sock *sk, struct sk_buff *skb, bool icmp);
-
 static int quic_udp_rcv(struct sock *sk, struct sk_buff *skb)
 {
 	memset(skb->cb, 0, sizeof(skb->cb));
