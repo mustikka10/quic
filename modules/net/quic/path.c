@@ -172,9 +172,11 @@ int quic_path_bind(struct sock *sk, struct quic_path_group *paths, u8 path)
 		mutex_lock(&head->lock);
 		us = quic_udp_sock_lookup(sk, a, port);
 		if (us) {
-			/* Reuse of an existing UDP tunnel socket is allowed,
-			 * but if it is currently being freed asynchronously by
-			 * the workqueue, it cannot be used now and retry later.
+			/* Allow reuse of an existing UDP tunnel socket.
+			 * However, if it is in the middle of asynchronous
+			 * teardown (via workqueue), it is temporarily unusable.
+			 * Return -EAGAIN (not -EADDRINUSE) to signal the caller
+			 * to retry soon.
 			 */
 			if (!quic_udp_sock_get(us)) {
 				mutex_unlock(&head->lock);
