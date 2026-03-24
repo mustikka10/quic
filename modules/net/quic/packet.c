@@ -282,16 +282,16 @@ static int quic_packet_backlog_schedule(struct net *net, struct sk_buff *skb)
 		return 0;
 
 	head = &qn->backlog_list;
-	spin_lock(&head->lock);
+	spin_lock_bh(&head->lock);
 	if (head->qlen >= QUIC_PACKET_BACKLOG_MAX) {
-		spin_unlock(&head->lock);
+		spin_unlock_bh(&head->lock);
 		QUIC_INC_STATS(net, QUIC_MIB_PKT_RCVDROP);
 		kfree_skb(skb);
 		return -ENOBUFS;
 	}
 	cb->backlog = 1;
 	__skb_queue_tail(head, skb);
-	spin_unlock(&head->lock);
+	spin_unlock_bh(&head->lock);
 
 	queue_work(quic_wq, &qn->work);
 	return 1;
