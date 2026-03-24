@@ -379,7 +379,7 @@ static int quic_snmp_seq_show(struct seq_file *seq, void *v)
 	snmp_get_cpu_field_batch_cnt(buff, quic_snmp_list, cnt, quic_net(net)->stat);
 	for (idx = 0; idx < cnt; idx++)
 #endif
-		seq_printf(seq, "%-32s\t%ld\n", quic_snmp_list[idx].name, buff[idx]);
+		seq_printf(seq, "%-32s\t%lu\n", quic_snmp_list[idx].name, buff[idx]);
 
 	return 0;
 }
