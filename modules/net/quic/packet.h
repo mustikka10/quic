@@ -9,46 +9,46 @@
  */
 
 struct quic_packet {
-	struct quic_conn_id dcid;	/* Dest Connection ID from received packet */
-	struct quic_conn_id scid;	/* Source Connection ID from received packet */
-	union quic_addr daddr;		/* Dest address from received packet */
-	union quic_addr saddr;		/* Source address from received packet */
+	struct quic_conn_id dcid; /* Dest Conn ID from received packet */
+	struct quic_conn_id scid; /* Source Conn ID from received packet */
+	union quic_addr daddr;    /* Dest address from received packet */
+	union quic_addr saddr;    /* Source address from received packet */
 
-	struct list_head frame_list;	/* List of frames to pack into packet for send */
-	struct sk_buff *head;		/* Head skb for packet bundling on send */
-	u16 frame_len;		/* Length of all ack-eliciting frames excluding PING */
-	u8 taglen[2];		/* Tag length for short and long packets */
-	u32 version;		/* QUIC version used/selected during handshake */
-	u8 errframe;		/* Frame type causing packet processing failure */
-	u8 overhead;		/* QUIC header length excluding frames */
-	u16 errcode;		/* Error code on packet processing failure */
-	u16 frames;		/* Number of ack-eliciting frames excluding PING */
-	u16 mss[2];		/* MSS for datagram and non-datagram packets */
-	u16 hlen;		/* UDP + IP header length for sending */
-	u16 len;		/* QUIC packet length excluding taglen for sending */
+	struct list_head frame_list; /* Frames to pack into packet for send */
+	struct sk_buff *head;        /* Head skb for packet bundling on send */
+	u16 frame_len; /* Length of all ack-eliciting frames excluding PING */
+	u8 taglen[2];  /* Tag length for short and long packets */
+	u32 version;   /* QUIC version used/selected during handshake */
+	u8 errframe;   /* Frame type causing packet processing failure */
+	u8 overhead;   /* QUIC header length excluding frames */
+	u16 errcode;   /* Error code on packet processing failure */
+	u16 frames;    /* Number of ack-eliciting frames excluding PING */
+	u16 mss[2];    /* MSS for datagram and non-datagram packets */
+	u16 hlen;      /* UDP + IP header length for sending */
+	u16 len;       /* QUIC packet length excluding taglen for sending */
 
-	u8 ack_eliciting:1;	/* Packet contains ack-eliciting frames to send */
-	u8 ack_requested:1;	/* Packet contains ack-eliciting frames received */
-	u8 ack_immediate:1;	/* Send ACK immediately (skip ack_delay timer) */
-	u8 non_probing:1;	/* Packet has ack-eliciting frames excluding NEW_CONNECTION_ID */
-	u8 has_sack:1;		/* Packet has ACK frames received */
-	u8 ipfragok:1;		/* Allow IP fragmentation */
-	u8 padding:1;		/* Packet has padding frames */
-	u8 path:1;		/* Path identifier used to send this packet */
-	u8 level;		/* Encryption level used */
+	u8 ack_eliciting:1; /* Packet contains ack-eliciting frames to send */
+	u8 ack_requested:1; /* Packet contains ack-eliciting frames received */
+	u8 ack_immediate:1; /* Send ACK immediately (skip ack_delay timer) */
+	u8 non_probing:1;   /* Ack-eliciting packet (excl. NEW_CONNECTION_ID) */
+	u8 has_sack:1;      /* Packet has ACK frames received */
+	u8 ipfragok:1;      /* Allow IP fragmentation */
+	u8 padding:1;       /* Packet has padding frames */
+	u8 path:1;          /* Path identifier used to send this packet */
+	u8 level;           /* Encryption level used */
 };
 
 struct quic_packet_sent {
-	struct list_head list;	/* Link in sent packet list for ACK tracking */
-	u64 sent_time;		/* Timestamp when packet was sent */
-	s64 number;		/* Packet number */
-	u8  level;		/* Packet number space */
-	u8  ecn:2;		/* ECN bits */
+	struct list_head list; /* Link in sent packet list for ACK tracking */
+	u64 sent_time;         /* Timestamp when packet was sent */
+	s64 number;            /* Packet number */
+	u8  level;             /* Packet number space */
+	u8  ecn:2;             /* ECN bits */
 
-	u16 frame_len;		/* Combined length of all frames held */
-	u16 frames;		/* Number of frames held */
+	u16 frame_len; /* Combined length of all frames held */
+	u16 frames;    /* Number of frames held */
 
-	struct quic_frame *frame_array[];	/* Array of pointers to held frames */
+	struct quic_frame *frame_array[]; /* Array of pointers to held frames */
 };
 
 #define QUIC_PACKET_INITIAL_V1		0
@@ -95,12 +95,14 @@ static inline u32 quic_packet_mss(struct quic_packet *packet)
 
 static inline u32 quic_packet_max_payload(struct quic_packet *packet)
 {
-	return packet->mss[QUIC_PACKET_MSS_NORMAL] - packet->overhead - quic_packet_taglen(packet);
+	return packet->mss[QUIC_PACKET_MSS_NORMAL] - packet->overhead -
+	       quic_packet_taglen(packet);
 }
 
 static inline u32 quic_packet_max_payload_dgram(struct quic_packet *packet)
 {
-	return packet->mss[QUIC_PACKET_MSS_DGRAM] - packet->overhead - quic_packet_taglen(packet);
+	return packet->mss[QUIC_PACKET_MSS_DGRAM] - packet->overhead -
+	       quic_packet_taglen(packet);
 }
 
 static inline bool quic_packet_empty(struct quic_packet *packet)
