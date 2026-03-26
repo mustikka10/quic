@@ -29,9 +29,11 @@ static char buf[65536];
 static char msg[512];
 
 #define QUIC_MSG_STREAM_FLAGS \
-	(MSG_QUIC_STREAM_NEW | MSG_QUIC_STREAM_FIN | MSG_QUIC_STREAM_UNI | MSG_QUIC_STREAM_DONTWAIT)
+	(MSG_QUIC_STREAM_NEW | MSG_QUIC_STREAM_FIN | MSG_QUIC_STREAM_UNI | \
+	 MSG_QUIC_STREAM_DONTWAIT)
 
-static ssize_t send_msg(int sockfd, const void *msg, size_t len, int64_t sid, uint32_t flags)
+static ssize_t send_msg(int sockfd, const void *msg, size_t len, int64_t sid,
+			uint32_t flags)
 {
 	char outcmsg[CMSG_SPACE(sizeof(struct quic_stream_info))];
 	struct quic_stream_info *info;
@@ -61,7 +63,8 @@ static ssize_t send_msg(int sockfd, const void *msg, size_t len, int64_t sid, ui
 	return sendmsg(sockfd, &outmsg, (int)(flags & ~QUIC_MSG_STREAM_FLAGS));
 }
 
-static ssize_t recv_msg(int sockfd, void *msg, size_t len, int64_t *sid, uint32_t *flags)
+static ssize_t recv_msg(int sockfd, void *msg, size_t len, int64_t *sid,
+			uint32_t *flags)
 {
 	char incmsg[CMSG_SPACE(sizeof(struct quic_stream_info))];
 	struct quic_stream_info *info;
@@ -90,7 +93,8 @@ static ssize_t recv_msg(int sockfd, void *msg, size_t len, int64_t *sid, uint32_
 	if (!cmsg)
 		return ret;
 
-	if (SOL_QUIC == cmsg->cmsg_level &&  QUIC_STREAM_INFO == cmsg->cmsg_type) {
+	if (cmsg->cmsg_level == SOL_QUIC &&
+	    cmsg->cmsg_type == QUIC_STREAM_INFO) {
 		info = (struct quic_stream_info *)CMSG_DATA(cmsg);
 		if (sid)
 			*sid = info->stream_id;
@@ -100,16 +104,19 @@ static ssize_t recv_msg(int sockfd, void *msg, size_t len, int64_t *sid, uint32_
 	return ret;
 }
 
-static int send_pass(int sockfd, const void *msg, size_t len, int64_t sid, uint32_t flags)
+static int send_pass(int sockfd, const void *msg, size_t len, int64_t sid,
+		     uint32_t flags)
 {
 	if (send_msg(sockfd, msg, len, sid, flags) < 0) {
-		printf("%s: fail errno=%d sid=%d fl=%u\n", __func__, errno, (int)sid, flags);
+		printf("%s: fail errno=%d sid=%d fl=%u\n", __func__, errno,
+		       (int)sid, flags);
 		return -1;
 	}
 	return 0;
 }
 
-static int send_fail(int sockfd, const void *msg, size_t len, int64_t sid, uint32_t flags)
+static int send_fail(int sockfd, const void *msg, size_t len, int64_t sid,
+		     uint32_t flags)
 {
 	if (send_msg(sockfd, msg, len, sid, flags) != -1) {
 		printf("%s: success sid=%d fl=%u\n", __func__, (int)sid, flags);
@@ -118,7 +125,8 @@ static int send_fail(int sockfd, const void *msg, size_t len, int64_t sid, uint3
 	return 0;
 }
 
-static int recv_pass(int sockfd, void *msg, size_t len, int64_t *sid, uint32_t *flags)
+static int recv_pass(int sockfd, void *msg, size_t len, int64_t *sid,
+		     uint32_t *flags)
 {
 	if (recv_msg(sockfd, msg, len, sid, flags) < 0) {
 		printf("%s: fail errno=%d\n", __func__, errno);
@@ -127,10 +135,12 @@ static int recv_pass(int sockfd, void *msg, size_t len, int64_t *sid, uint32_t *
 	return 0;
 }
 
-static int recv_fail(int sockfd, void *msg, size_t len, int64_t *sid, uint32_t *flags)
+static int recv_fail(int sockfd, void *msg, size_t len, int64_t *sid,
+		     uint32_t *flags)
 {
 	if (recv_msg(sockfd, msg, len, sid, flags) != -1) {
-		printf("%s: success sid=%d fl=%u\n", __func__, (int)*sid, *flags);
+		printf("%s: success sid=%d fl=%u\n", __func__, (int)*sid,
+		       *flags);
 		return -1;
 	}
 	return 0;
@@ -149,7 +159,8 @@ static int echo(int connectfd, int acceptfd, int64_t sid, uint32_t flags)
 		printf("%s: sid=%d-%d\n", __func__, (int)s, (int)sid);
 		return -1;
 	}
-	if (sid == -1 ? (flags & MSG_QUIC_STREAM_UNI) : (sid & QUIC_STREAM_TYPE_UNI_MASK))
+	if (sid == -1 ? (flags & MSG_QUIC_STREAM_UNI) :
+			(sid & QUIC_STREAM_TYPE_UNI_MASK))
 		return 0;
 	if (!(flags & MSG_QUIC_STREAM_FIN))
 		return 0;
@@ -198,7 +209,8 @@ static int recv_event_connection_migration(int sockfd, int local)
 {
 	union quic_event *ev;
 
-	if (recv_event(sockfd, msg, sizeof(msg), QUIC_EVENT_CONNECTION_MIGRATION))
+	if (recv_event(sockfd, msg, sizeof(msg),
+		       QUIC_EVENT_CONNECTION_MIGRATION))
 		return -1;
 	ev = (union quic_event *)&msg[1];
 	if (ev->local_migration != local) {
@@ -230,13 +242,15 @@ static int recv_event_connection_id(int sockfd, int dest, uint32_t prior_to)
 		return -1;
 	ev = (union quic_event *)&msg[1];
 	if (ev->info.dest != dest || ev->info.prior_to != prior_to) {
-		printf("%s: dest=%d prior_to=%u\n", __func__, dest, ev->info.prior_to);
+		printf("%s: dest=%d prior_to=%u\n", __func__, dest,
+		       ev->info.prior_to);
 		return -1;
 	}
 	return 0;
 }
 
-static int recv_event_connection_close(int sockfd, uint32_t errcode, uint8_t frame, char *phrase)
+static int recv_event_connection_close(int sockfd, uint32_t errcode,
+				       uint8_t frame, char *phrase)
 {
 	union quic_event *ev;
 
@@ -350,7 +364,8 @@ static int getopt_port(int sockfd, uint16_t port)
 	return 0;
 }
 
-static int getopt_connection_close(int sockfd, uint32_t errcode, uint8_t frame, char *phrase)
+static int getopt_connection_close(int sockfd, uint32_t errcode, uint8_t frame,
+				   char *phrase)
 {
 	struct quic_connection_close *info;
 	unsigned int optlen;
@@ -369,7 +384,8 @@ static int getopt_connection_close(int sockfd, uint32_t errcode, uint8_t frame, 
 	return 0;
 }
 
-static int send_handshake(int sockfd, void *msg, size_t len, uint8_t level, uint32_t flags)
+static int send_handshake(int sockfd, void *msg, size_t len, uint8_t level,
+			  uint32_t flags)
 {
 	char outcmsg[CMSG_SPACE(sizeof(struct quic_handshake_info))];
 	struct quic_handshake_info *info;
@@ -397,7 +413,8 @@ static int send_handshake(int sockfd, void *msg, size_t len, uint8_t level, uint
 	return sendmsg(sockfd, &outmsg, flags);
 }
 
-static int recv_handshake(int sockfd, void *msg, size_t len, uint8_t *level, uint32_t flags)
+static int recv_handshake(int sockfd, void *msg, size_t len, uint8_t *level,
+			  uint32_t flags)
 {
 	char incmsg[CMSG_SPACE(sizeof(struct quic_handshake_info))];
 	struct quic_handshake_info *info;
@@ -423,7 +440,8 @@ static int recv_handshake(int sockfd, void *msg, size_t len, uint8_t *level, uin
 	if (!cmsg)
 		return ret;
 
-	if (SOL_QUIC == cmsg->cmsg_level && QUIC_HANDSHAKE_INFO == cmsg->cmsg_type) {
+	if (cmsg->cmsg_level == SOL_QUIC &&
+	    cmsg->cmsg_type == QUIC_HANDSHAKE_INFO) {
 		info = (struct quic_handshake_info *)CMSG_DATA(cmsg);
 		*level = info->crypto_level;
 	}
@@ -552,7 +570,8 @@ static uint8_t fake_ticket[] = {
 
 static int send_fake_ticket(int sockfd)
 {
-	if (send_handshake(sockfd, fake_ticket, sizeof(fake_ticket), QUIC_CRYPTO_APP, 0) < 0) {
+	if (send_handshake(sockfd, fake_ticket, sizeof(fake_ticket),
+			   QUIC_CRYPTO_APP, 0) < 0) {
 		printf("%s: errno=%d\n", __func__, errno);
 		return -1;
 	}
@@ -584,7 +603,8 @@ static int send_fake_handshake(int sockfd, uint8_t level, uint8_t serv)
 	len = sizeof(msg);
 	if ((!serv && level == QUIC_CRYPTO_INITIAL)) {
 		len = sizeof(ext);
-		if (getopt_pass(sockfd, QUIC_SOCKOPT_TRANSPORT_PARAM_EXT, ext, &len))
+		if (getopt_pass(sockfd, QUIC_SOCKOPT_TRANSPORT_PARAM_EXT, ext,
+				&len))
 			return -1;
 		if (early_data && set_fake_keys(sockfd, QUIC_CRYPTO_EARLY, 0))
 			return -1;
@@ -596,16 +616,19 @@ static int send_fake_handshake(int sockfd, uint8_t level, uint8_t serv)
 
 	if (serv && level == QUIC_CRYPTO_HANDSHAKE) {
 		len = sizeof(ext);
-		if (getopt_pass(sockfd, QUIC_SOCKOPT_TRANSPORT_PARAM_EXT, ext, &len))
+		if (getopt_pass(sockfd, QUIC_SOCKOPT_TRANSPORT_PARAM_EXT, ext,
+				&len))
 			return -1;
 		/* EncryptedExtensions + TP_EXT */
-		memcpy(msg, fake_encrypted_extensions, sizeof(fake_encrypted_extensions));
+		memcpy(msg, fake_encrypted_extensions,
+		       sizeof(fake_encrypted_extensions));
 		memcpy(&msg[sizeof(fake_encrypted_extensions)], ext, len);
 		len += sizeof(fake_encrypted_extensions);
 	}
 
 	if (send_handshake(sockfd, msg, len, level, 0) < 0) {
-		printf("%s: errno=%d level=%d serv=%d\n", __func__, errno, level, serv);
+		printf("%s: errno=%d level=%d serv=%d\n", __func__, errno,
+		       level, serv);
 		return -1;
 	}
 	return 0;
@@ -621,7 +644,8 @@ static int recv_fake_handshake(int sockfd, uint8_t level, uint8_t serv)
 	len = sizeof(msg);
 	ret = recv_handshake(sockfd, msg, len, &l, 0);
 	if (ret < 0) {
-		printf("%s: errno=%d level=%d serv=%d\n", __func__, errno, level, serv);
+		printf("%s: errno=%d level=%d serv=%d\n", __func__, errno,
+		       level, serv);
 		return -1;
 	}
 	if (l != level) {
@@ -635,7 +659,8 @@ static int recv_fake_handshake(int sockfd, uint8_t level, uint8_t serv)
 		if (len < sizeof(fake_client_hello))
 			return -1;
 		len -= sizeof(fake_client_hello);
-		if (setopt_pass(sockfd, QUIC_SOCKOPT_TRANSPORT_PARAM_EXT, ext, len))
+		if (setopt_pass(sockfd, QUIC_SOCKOPT_TRANSPORT_PARAM_EXT, ext,
+				len))
 			return -1;
 		if (early_data && set_fake_keys(sockfd, QUIC_CRYPTO_EARLY, 1))
 			return -1;
@@ -645,7 +670,8 @@ static int recv_fake_handshake(int sockfd, uint8_t level, uint8_t serv)
 		if (len < sizeof(fake_encrypted_extensions))
 			return -1;
 		len -= sizeof(fake_encrypted_extensions);
-		if (setopt_pass(sockfd, QUIC_SOCKOPT_TRANSPORT_PARAM_EXT, ext, len))
+		if (setopt_pass(sockfd, QUIC_SOCKOPT_TRANSPORT_PARAM_EXT, ext,
+				len))
 			return -1;
 	}
 	return 0;
@@ -709,7 +735,8 @@ static int create_socket(struct sockaddr_storage *a, char *name)
 		printf("socket: errno=%d\n", errno);
 		return -1;
 	}
-	if (name && setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, name, strlen(name) + 1)) {
+	if (name && setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, name,
+			       strlen(name) + 1)) {
 		printf("setsockopt: SO_BINDTODEVICE errno=%d\n", errno);
 		return -1;
 	}
@@ -732,7 +759,8 @@ static int create_listen_socket(char *alpn)
 	listenfd = create_socket(&sa, dev[1]);
 	if (listenfd < 0)
 		return -1;
-	if (alpn && setopt_pass(listenfd, QUIC_SOCKOPT_ALPN, alpn, strlen(alpn)))
+	if (alpn &&
+	    setopt_pass(listenfd, QUIC_SOCKOPT_ALPN, alpn, strlen(alpn)))
 		return -1;
 	if (bind(listenfd, (struct sockaddr *)&sa, sizeof(sa))) {
 		printf("bind: errno=%d\n", errno);
@@ -885,7 +913,8 @@ static int test_handshake(int *connectfd_p, int *acceptfd_p)
 		return -1;
 	memset(&config, 0, sizeof(config));
 	config.version = 123;
-	if (setopt_pass(connectfd, QUIC_SOCKOPT_CONFIG, &config, sizeof(config)))
+	if (setopt_pass(connectfd, QUIC_SOCKOPT_CONFIG, &config,
+			sizeof(config)))
 		return -1;
 	acceptfd = accept_socket(listenfd, connectfd);
 	if (acceptfd < 0)
@@ -940,7 +969,8 @@ static int test_handshake(int *connectfd_p, int *acceptfd_p)
 		return -1;
 	}
 	change_port(&sa);
-	if (setopt_pass(acceptfd, QUIC_SOCKOPT_CONNECTION_MIGRATION, &sa, sizeof(sa)))
+	if (setopt_pass(acceptfd, QUIC_SOCKOPT_CONNECTION_MIGRATION, &sa,
+			sizeof(sa)))
 		return -1;
 	if (do_handshake(connectfd, acceptfd))
 		return -1;
@@ -980,9 +1010,11 @@ static int test_handshake(int *connectfd_p, int *acceptfd_p)
 		return -1;
 	memset(&param, 0, sizeof(param));
 	param.disable_1rtt_encryption = 1;
-	if (setopt_pass(connectfd, QUIC_SOCKOPT_TRANSPORT_PARAM, &param, sizeof(param)))
+	if (setopt_pass(connectfd, QUIC_SOCKOPT_TRANSPORT_PARAM, &param,
+			sizeof(param)))
 		return -1;
-	if (setopt_pass(listenfd, QUIC_SOCKOPT_TRANSPORT_PARAM, &param, sizeof(param)))
+	if (setopt_pass(listenfd, QUIC_SOCKOPT_TRANSPORT_PARAM, &param,
+			sizeof(param)))
 		return -1;
 	acceptfd = accept_socket(listenfd, connectfd);
 	if (acceptfd < 0)
@@ -999,9 +1031,11 @@ static int test_handshake(int *connectfd_p, int *acceptfd_p)
 		return -1;
 	memset(&param, 0, sizeof(param));
 	param.max_datagram_frame_size = 1400;
-	if (setopt_pass(connectfd, QUIC_SOCKOPT_TRANSPORT_PARAM, &param, sizeof(param)))
+	if (setopt_pass(connectfd, QUIC_SOCKOPT_TRANSPORT_PARAM, &param,
+			sizeof(param)))
 		return -1;
-	if (setopt_pass(listenfd, QUIC_SOCKOPT_TRANSPORT_PARAM, &param, sizeof(param)))
+	if (setopt_pass(listenfd, QUIC_SOCKOPT_TRANSPORT_PARAM, &param,
+			sizeof(param)))
 		return -1;
 	acceptfd = accept_socket(listenfd, connectfd);
 	if (acceptfd < 0)
@@ -1150,7 +1184,8 @@ static int test_stream(int connectfd, int acceptfd)
 
 	/* 0 4 8 12 16 400 (bidi_closed=6) */
 	sid = 424; /* 0 + max_streams (100) * 4 +  bidi_closed (6) * 4 */
-	flags = MSG_QUIC_STREAM_NEW | MSG_QUIC_STREAM_FIN | MSG_QUIC_STREAM_DONTWAIT;
+	flags = MSG_QUIC_STREAM_NEW | MSG_QUIC_STREAM_FIN |
+		MSG_QUIC_STREAM_DONTWAIT;
 	if (send_fail(connectfd, msg, sizeof(msg), sid, flags))
 		return -1;
 	printf("[] Send with sid > current max_streams_bidi\n");
@@ -1160,14 +1195,16 @@ static int test_stream(int connectfd, int acceptfd)
 	if (echo(connectfd, acceptfd, sid, flags))
 		return -1;
 	sid = 424;
-	flags = MSG_QUIC_STREAM_NEW | MSG_QUIC_STREAM_FIN | MSG_QUIC_STREAM_DONTWAIT;
+	flags = MSG_QUIC_STREAM_NEW | MSG_QUIC_STREAM_FIN |
+		MSG_QUIC_STREAM_DONTWAIT;
 	if (echo(connectfd, acceptfd, sid, flags))
 		return -1;
 	printf("[] Send after max_streams_bidi increased\n");
 
 	/* 2 6 10 14 402 (uni_closed=5) */
 	sid = 422; /* 2 + max_streams (100) * 4 +  uni_closed(5) * 4 */
-	flags = MSG_QUIC_STREAM_NEW | MSG_QUIC_STREAM_FIN | MSG_QUIC_STREAM_DONTWAIT;
+	flags = MSG_QUIC_STREAM_NEW | MSG_QUIC_STREAM_FIN |
+		MSG_QUIC_STREAM_DONTWAIT;
 	if (send_fail(connectfd, msg, sizeof(msg), sid, flags))
 		return -1;
 	printf("[] Send with sid > current max_streams_uni\n");
@@ -1177,7 +1214,8 @@ static int test_stream(int connectfd, int acceptfd)
 	if (echo(connectfd, acceptfd, sid, flags))
 		return -1;
 	sid = 422;
-	flags = MSG_QUIC_STREAM_NEW | MSG_QUIC_STREAM_FIN | MSG_QUIC_STREAM_DONTWAIT;
+	flags = MSG_QUIC_STREAM_NEW | MSG_QUIC_STREAM_FIN |
+		MSG_QUIC_STREAM_DONTWAIT;
 	if (echo(connectfd, acceptfd, sid, flags))
 		return -1;
 	printf("[] Send after max_streams_uni increased\n");
@@ -1205,7 +1243,7 @@ static int test_stream(int connectfd, int acceptfd)
 	printf("[] STREAM_OPEN with sid > initial max_streams_uni\n");
 
 	/* 0 4 8 12 16 400 404 408 424 (bidi_closed=9) */
-	info.stream_id = 436; /* 0 + max_streams (100) * 4 +  bidi_closed (9) * 4 */
+	info.stream_id = 436; /* 0 + max_streams * 4 +  bidi_closed (9) * 4 */
 	info.stream_flags = MSG_QUIC_STREAM_DONTWAIT;
 	optlen = sizeof(info);
 	if (getopt_fail(connectfd, QUIC_SOCKOPT_STREAM_OPEN, &info, &optlen))
@@ -1228,7 +1266,7 @@ static int test_stream(int connectfd, int acceptfd)
 	printf("[] Send after max_streams_bidi extended via STREAM_OPEN\n");
 
 	/* 2 6 10 14 402 406 410 422 (uni_closed=8) */
-	info.stream_id = 434; /* 2 + max_streams (100) * 4 +  uni_closed (8) * 4 */
+	info.stream_id = 434; /* 2 + max_streams * 4 +  uni_closed (8) * 4 */
 	info.stream_flags = MSG_QUIC_STREAM_DONTWAIT;
 	optlen = sizeof(info);
 	if (getopt_fail(connectfd, QUIC_SOCKOPT_STREAM_OPEN, &info, &optlen))
@@ -1296,14 +1334,16 @@ static int test_stream(int connectfd, int acceptfd)
 	optlen = sizeof(errinfo);
 	errinfo.stream_id = 412;
 	errinfo.errcode = 1;
-	if (setopt_fail(acceptfd, QUIC_SOCKOPT_STREAM_STOP_SENDING, &errinfo, optlen))
+	if (setopt_fail(acceptfd, QUIC_SOCKOPT_STREAM_STOP_SENDING, &errinfo,
+			optlen))
 		return -1;
 	printf("[] Cannot stop-sending on closed stream\n");
 
 	optlen = sizeof(errinfo);
 	errinfo.stream_id = 444;
 	errinfo.errcode = 1;
-	if (setopt_fail(connectfd, QUIC_SOCKOPT_STREAM_STOP_SENDING, &errinfo, optlen))
+	if (setopt_fail(connectfd, QUIC_SOCKOPT_STREAM_STOP_SENDING, &errinfo,
+			optlen))
 		return -1;
 	printf("[] Cannot stop-sending on non-opened stream\n");
 
@@ -1315,14 +1355,16 @@ static int test_stream(int connectfd, int acceptfd)
 	optlen = sizeof(errinfo);
 	errinfo.stream_id = sid;
 	errinfo.errcode = 1;
-	if (setopt_fail(connectfd, QUIC_SOCKOPT_STREAM_STOP_SENDING, &errinfo, optlen))
+	if (setopt_fail(connectfd, QUIC_SOCKOPT_STREAM_STOP_SENDING, &errinfo,
+			optlen))
 		return -1;
 	printf("[] Cannot stop-sending on send-only stream\n");
 
 	optlen = sizeof(errinfo);
 	errinfo.stream_id = sid;
 	errinfo.errcode = 1;
-	if (setopt_pass(acceptfd, QUIC_SOCKOPT_STREAM_STOP_SENDING, &errinfo, optlen))
+	if (setopt_pass(acceptfd, QUIC_SOCKOPT_STREAM_STOP_SENDING, &errinfo,
+			optlen))
 		return -1;
 	printf("[] Peer stop-sending accepted\n");
 
@@ -1355,7 +1397,8 @@ static int test_connection(int connectfd, int acceptfd)
 	info.prior_to = 3;
 	info.active = 0;
 	info.dest = 0;
-	if (setopt_pass(connectfd, QUIC_SOCKOPT_CONNECTION_ID, &info, optlen)) /* 3-9 */
+	/* 3-9 */
+	if (setopt_pass(connectfd, QUIC_SOCKOPT_CONNECTION_ID, &info, optlen))
 		return -1;
 	sid = -1;
 	flags = MSG_QUIC_STREAM_NEW | MSG_QUIC_STREAM_FIN;
@@ -1390,7 +1433,8 @@ static int test_connection(int connectfd, int acceptfd)
 	info.prior_to = 3;
 	info.active = 0;
 	info.dest = 1;
-	if (setopt_pass(connectfd, QUIC_SOCKOPT_CONNECTION_ID, &info, optlen)) /* 3-9 */
+	/* 3-9 */
+	if (setopt_pass(connectfd, QUIC_SOCKOPT_CONNECTION_ID, &info, optlen))
 		return -1;
 	sid = -1;
 	flags = MSG_QUIC_STREAM_NEW | MSG_QUIC_STREAM_FIN;
@@ -1419,7 +1463,7 @@ static int test_connection(int connectfd, int acceptfd)
 	info.dest = 1;
 	if (setopt_fail(connectfd, QUIC_SOCKOPT_CONNECTION_ID, &info, optlen))
 		return -1;
-	printf("[] Reject destination CID retire request: prior_to out of range\n");
+	printf("[] Reject dest CID retire request: prior_to out of range\n");
 
 	/* Connection Migration */
 	optlen = sizeof(sa);
@@ -1427,19 +1471,23 @@ static int test_connection(int connectfd, int acceptfd)
 		printf("getsockname: errno=%d\n", errno);
 		return -1;
 	}
-	if (setopt_fail(connectfd, QUIC_SOCKOPT_CONNECTION_MIGRATION, &sa, optlen))
+	if (setopt_fail(connectfd, QUIC_SOCKOPT_CONNECTION_MIGRATION, &sa,
+			optlen))
 		return -1;
 	printf("[] Reject migration to same address/port\n");
 
-	if (setopt_fail(connectfd, QUIC_SOCKOPT_CONNECTION_MIGRATION, &sa, optlen - 1))
+	if (setopt_fail(connectfd, QUIC_SOCKOPT_CONNECTION_MIGRATION, &sa,
+			optlen - 1))
 		return -1;
-	printf("[] Reject migration with malformed address (optlen too small)\n");
+	printf("[] Reject migration with bad address (optlen too small)\n");
 
 	port = change_port(&sa);
-	if (setopt_pass(connectfd, QUIC_SOCKOPT_CONNECTION_MIGRATION, &sa, optlen))
+	if (setopt_pass(connectfd, QUIC_SOCKOPT_CONNECTION_MIGRATION, &sa,
+			optlen))
 		return -1;
 	change_port(&sa);
-	if (setopt_fail(connectfd, QUIC_SOCKOPT_CONNECTION_MIGRATION, &sa, optlen))
+	if (setopt_fail(connectfd, QUIC_SOCKOPT_CONNECTION_MIGRATION, &sa,
+			optlen))
 		return -1;
 	printf("[] Reject migration when another migration already pending\n");
 
@@ -1518,7 +1566,8 @@ static int test_connection(int connectfd, int acceptfd)
 		return -1;
 	printf("[] Reject too-large session ticket (>4096 bytes)\n");
 
-	if (setopt_pass(acceptfd, QUIC_SOCKOPT_SESSION_TICKET, msg, sizeof(msg)))
+	if (setopt_pass(acceptfd, QUIC_SOCKOPT_SESSION_TICKET, msg,
+			sizeof(msg)))
 		return -1;
 	if (getopt_session_ticket(acceptfd, sizeof(msg)))
 		return -1;
@@ -1608,14 +1657,17 @@ static int test_notification(int connectfd, int acceptfd)
 	optlen = sizeof(errinfo);
 	errinfo.stream_id = info.stream_id;
 	errinfo.errcode = 1;
-	if (setopt_pass(connectfd, QUIC_SOCKOPT_STREAM_RESET, &errinfo, optlen))
+	if (setopt_pass(connectfd, QUIC_SOCKOPT_STREAM_RESET, &errinfo,
+			optlen))
 		return -1;
-	if (recv_event_stream_update(acceptfd, QUIC_STREAM_RECV_STATE_RESET_RECVD))
+	if (recv_event_stream_update(acceptfd,
+				     QUIC_STREAM_RECV_STATE_RESET_RECVD))
 		return -1;
 	printf("[] Stream RECV_STATE_RESET_RECVD\n");
 
 	flags = 0;
-	if (recv_event_stream_update(connectfd, QUIC_STREAM_SEND_STATE_RESET_RECVD))
+	if (recv_event_stream_update(connectfd,
+				     QUIC_STREAM_SEND_STATE_RESET_RECVD))
 		return -1;
 	printf("[] Stream SEND_STATE_RESET_RECVD\n");
 
@@ -1646,7 +1698,8 @@ static int test_notification(int connectfd, int acceptfd)
 		return -1;
 	}
 	change_port(&sa);
-	if (setopt_pass(connectfd, QUIC_SOCKOPT_CONNECTION_MIGRATION, &sa, optlen))
+	if (setopt_pass(connectfd, QUIC_SOCKOPT_CONNECTION_MIGRATION, &sa,
+			optlen))
 		return -1;
 	sid = -1;
 	flags = MSG_QUIC_STREAM_NEW | MSG_QUIC_STREAM_FIN;
@@ -1734,7 +1787,8 @@ static int test_notification(int connectfd, int acceptfd)
 
 	if (send_fake_ticket(acceptfd))
 		return -1;
-	if (recv_event(connectfd, msg, sizeof(msg), QUIC_EVENT_NEW_SESSION_TICKET))
+	if (recv_event(connectfd, msg, sizeof(msg),
+		       QUIC_EVENT_NEW_SESSION_TICKET))
 		return -1;
 	printf("[] New session ticket event\n");
 
@@ -1807,7 +1861,8 @@ static int test_close(int connectfd, int acceptfd)
 	info = (struct quic_connection_close *)msg;
 	info->errcode = 10;
 	info->frame = 1;
-	snprintf((char *)info->phrase, sizeof(msg) - sizeof(*info), "this is app err");
+	snprintf((char *)info->phrase, sizeof(msg) - sizeof(*info),
+		 "this is app err");
 	if (setopt_fail(acceptfd, QUIC_SOCKOPT_CONNECTION_CLOSE, info,
 			sizeof(*info) + strlen((char *)info->phrase)))
 		return -1;
@@ -1816,14 +1871,16 @@ static int test_close(int connectfd, int acceptfd)
 	info = (struct quic_connection_close *)msg;
 	info->errcode = 10;
 	info->frame = 1;
-	if (setopt_fail(acceptfd, QUIC_SOCKOPT_CONNECTION_CLOSE, info, sizeof(*info) - 1))
+	if (setopt_fail(acceptfd, QUIC_SOCKOPT_CONNECTION_CLOSE, info,
+			sizeof(*info) - 1))
 		return -1;
 	printf("[] Reject close info: buffer too small\n");
 
 	info = (struct quic_connection_close *)msg;
 	info->errcode = 10;
 	info->frame = 1;
-	snprintf((char *)info->phrase, sizeof(msg) - sizeof(*info), "this is app err");
+	snprintf((char *)info->phrase, sizeof(msg) - sizeof(*info),
+		 "this is app err");
 	if (setopt_pass(connectfd, QUIC_SOCKOPT_CONNECTION_CLOSE, info,
 			sizeof(*info) + strlen((char *)info->phrase) + 1))
 		return -1;
@@ -1965,7 +2022,7 @@ static struct nlattr *nla_next(const struct nlattr *nla, int *remaining)
 
 	if (remaining)
 		*remaining -= totlen;
-	return (struct nlattr *)((char *) nla + totlen);
+	return (struct nlattr *)((char *)nla + totlen);
 }
 
 static void nla_put_u32(struct nlattr *nla, int type, uint32_t value)
@@ -2046,7 +2103,8 @@ static int get_group_and_family_id(int fd, int *family_id, int *group_id)
 			nla_for_each_attr(g_na, na, g_rem) {
 				i_na = nla_data(g_na);
 				n_na = nla_next(i_na, NULL);
-				if (!strcmp(nla_data(n_na), HANDSHAKE_MCGRP_TLSHD))
+				if (!strcmp(nla_data(n_na),
+					    HANDSHAKE_MCGRP_TLSHD))
 					*group_id = nla_get_u32(i_na);
 			}
 		}
@@ -2064,7 +2122,8 @@ static int get_accept_fd(int fd, int family_id, int *type)
 	nlh = (struct nlmsghdr *)buf;
 	nlmsg_init(nlh, family_id, HANDSHAKE_CMD_ACCEPT);
 	na = nlmsg_data(nlh);
-	nla_put_u32(na, HANDSHAKE_A_ACCEPT_HANDLER_CLASS, HANDSHAKE_HANDLER_CLASS_TLSHD);
+	nla_put_u32(na, HANDSHAKE_A_ACCEPT_HANDLER_CLASS,
+		    HANDSHAKE_HANDLER_CLASS_TLSHD);
 	nlh->nlmsg_len += na->nla_len;
 
 	if (send(fd, buf, nlh->nlmsg_len, 0) < 0) {
@@ -2153,7 +2212,8 @@ static int fake_tlshd(char *argv[])
 		return -1;
 	if (get_group_and_family_id(fd, &family_id, &group_id))
 		return -1;
-	if (setsockopt(fd, SOL_NETLINK, NETLINK_ADD_MEMBERSHIP, &group_id, sizeof(group_id))) {
+	if (setsockopt(fd, SOL_NETLINK, NETLINK_ADD_MEMBERSHIP, &group_id,
+		       sizeof(group_id))) {
 		printf("setsockopt: NETLINK_ADD_MEMBERSHIP errno=%d\n", errno);
 		return -1;
 	}
@@ -2257,12 +2317,14 @@ static int ticket_client(void)
 		return -1;
 
 	ticket_len = sizeof(ticket);
-	if (getopt_pass(sockfd, QUIC_SOCKOPT_SESSION_TICKET, ticket, &ticket_len))
+	if (getopt_pass(sockfd, QUIC_SOCKOPT_SESSION_TICKET, ticket,
+			&ticket_len))
 		return -1;
 
 	param_len = sizeof(param);
 	param.remote = 1;
-	if (getopt_pass(sockfd, QUIC_SOCKOPT_TRANSPORT_PARAM, &param, &param_len))
+	if (getopt_pass(sockfd, QUIC_SOCKOPT_TRANSPORT_PARAM, &param,
+			&param_len))
 		return -1;
 
 	printf("[] get the session ticket %u and transport param %u, save it\n",
@@ -2289,7 +2351,8 @@ static int ticket_client(void)
 	if (sockfd < 0)
 		return -1;
 
-	if (setopt_pass(sockfd, QUIC_SOCKOPT_TRANSPORT_PARAM, &param, param_len))
+	if (setopt_pass(sockfd, QUIC_SOCKOPT_TRANSPORT_PARAM, &param,
+			param_len))
 		return -1;
 
 	snprintf(msg, sizeof(msg), "hello quic server, I'm back!");
@@ -2401,8 +2464,10 @@ static int sample_test(char *argv[])
 			port = atoi(argv[4]);
 			if (!port)
 				goto err;
-			if (argv[5])
-				dev[0] = dev[1] = argv[5];
+			if (argv[5]) {
+				dev[0] = argv[5];
+				dev[1] = dev[0];
+			}
 		}
 	}
 
@@ -2530,8 +2595,10 @@ static int perf_test(char *argv[])
 			port = atoi(argv[5]);
 			if (!port)
 				goto err;
-			if (argv[6])
-				dev[0] = dev[1] = argv[6];
+			if (argv[6]) {
+				dev[0] = argv[6];
+				dev[1] = dev[0];
+			}
 		}
 	}
 

@@ -100,7 +100,8 @@ cleanup()
 
 trap cleanup EXIT
 
-gcc -o quic_test quic_test.c -lpthread -Wall -Wl,--no-as-needed -O2 -g -D_GNU_SOURCE= || exit $?
+gcc -o quic_test quic_test.c -lpthread -Wall -Wl,--no-as-needed -O2 -g \
+	-D_GNU_SOURCE= || exit $?
 
 [ -d /sys/module/quic ] || unload=1
 
@@ -124,8 +125,10 @@ do_test()
 		ip link set $sveth mtu $mtu || return $?
 		for size in 256 1024 4096 16384 65536; do
 			echo "=> MTU = $mtu (Message size = $size)"
-			server_run ./quic_test perf server $size $addr $port $sveth || return $?
-			client_run ./quic_test perf client $size $addr $port $cveth || return $?
+			server_run ./quic_test perf server $size $addr $port \
+				$sveth || return $?
+			client_run ./quic_test perf client $size $addr $port \
+				$cveth || return $?
 		done
 	done
 	ip link set $cveth mtu 1500
@@ -140,15 +143,17 @@ do_test()
 	if modprobe -nq quic_sample_test; then
 		echo "=> Userspace -> Kernel"
 		daemon_run ./quic_test tlshd 2
-		server_run modprobe quic_sample_test role=server ip=$addr port=$port dev=$sveth || \
+		server_run modprobe quic_sample_test role=server ip=$addr \
+			port=$port dev=$sveth || return $?
+		client_run ./quic_test sample client $addr $port $cveth || \
 			return $?
-		client_run ./quic_test sample client $addr $port $cveth || return $?
 		rmmod quic_sample_test
 
 		echo "=> Kernel -> Userspace"
-		server_run ./quic_test sample server $addr $port $sveth || return $?
-		client_run modprobe quic_sample_test role=client ip=$addr port=$port dev=$cveth || \
+		server_run ./quic_test sample server $addr $port $sveth || \
 			return $?
+		client_run modprobe quic_sample_test role=client ip=$addr \
+			port=$port dev=$cveth || return $?
 		rmmod quic_sample_test
 		dmesg | tail -n 5
 		sleep 1
@@ -163,15 +168,17 @@ do_test()
 	if modprobe -nq quic_sample_test; then
 		echo "=> Userspace -> Kernel"
 		daemon_run ./quic_test tlshd 4
-		server_run modprobe quic_sample_test alpn=ticket role=server ip=$addr port=$port \
-			dev=$sveth || return $?
-		client_run ./quic_test ticket client $addr $port $cveth || return $?
+		server_run modprobe quic_sample_test alpn=ticket role=server \
+			ip=$addr port=$port dev=$sveth || return $?
+		client_run ./quic_test ticket client $addr $port $cveth || \
+			return $?
 		rmmod quic_sample_test
 
 		echo "=> Kernel -> Userspace"
-		server_run ./quic_test ticket server $addr $port $sveth || return $?
-		client_run modprobe quic_sample_test alpn=ticket role=client ip=$addr port=$port \
-			dev=$cveth || return $?
+		server_run ./quic_test ticket server $addr $port $sveth || \
+			return $?
+		client_run modprobe quic_sample_test alpn=ticket role=client \
+			ip=$addr port=$port dev=$cveth || return $?
 		rmmod quic_sample_test
 		dmesg | tail -n 9
 		sleep 1
