@@ -35,10 +35,10 @@
 #define QUIC_VARINT_LENGTH(p)		BIT((*(p)) >> 6)
 
 struct quic_hashinfo {
-	struct quic_shash_table		shash; /* Source connection ID hashtable */
-	struct quic_shash_table		lhash; /* Listening sock hashtable */
-	struct quic_shash_table		chash; /* Connection sock hashtable */
-	struct quic_uhash_table		uhash; /* UDP sock hashtable */
+	struct quic_shash_table shash; /* Source connection ID hashtable */
+	struct quic_shash_table lhash; /* Listening sock hashtable */
+	struct quic_shash_table chash; /* Connection sock hashtable */
+	struct quic_uhash_table uhash; /* UDP sock hashtable */
 };
 
 static struct quic_hashinfo quic_hashinfo;
@@ -50,13 +50,17 @@ u32 quic_sock_hash_size(void)
 
 u32 quic_sock_hash(struct net *net, union quic_addr *s, union quic_addr *d)
 {
-	u32 ports = ((__force u32)s->v4.sin_port) << 16 | (__force u32)d->v4.sin_port;
-	u32 saddr = (s->sa.sa_family == AF_INET6) ? jhash(&s->v6.sin6_addr, 16, 0) :
-						    (__force u32)s->v4.sin_addr.s_addr;
-	u32 daddr = (d->sa.sa_family == AF_INET6) ? jhash(&d->v6.sin6_addr, 16, 0) :
-						    (__force u32)d->v4.sin_addr.s_addr;
+	u32 ports = ((__force u32)s->v4.sin_port) << 16 |
+		    (__force u32)d->v4.sin_port;
+	u32 saddr = (s->sa.sa_family == AF_INET6) ?
+		    jhash(&s->v6.sin6_addr, 16, 0) :
+		    (__force u32)s->v4.sin_addr.s_addr;
+	u32 daddr = (d->sa.sa_family == AF_INET6) ?
+		    jhash(&d->v6.sin6_addr, 16, 0) :
+		    (__force u32)d->v4.sin_addr.s_addr;
+	u32 hash = jhash_3words(saddr, ports, net_hash_mix(net), daddr);
 
-	return jhash_3words(saddr, ports, net_hash_mix(net), daddr) & (quic_sock_hash_size() - 1);
+	return hash & (quic_sock_hash_size() - 1);
 }
 
 struct quic_shash_head *quic_sock_head(u32 hash)
@@ -71,8 +75,9 @@ u32 quic_listen_sock_hash_size(void)
 
 u32 quic_listen_sock_hash(struct net *net, u16 port)
 {
-	return jhash_2words((__force u32)port, net_hash_mix(net), 0) &
-		(quic_listen_sock_hash_size() - 1);
+	u32 hash = jhash_2words((__force u32)port, net_hash_mix(net), 0);
+
+	return hash & (quic_listen_sock_hash_size() - 1);
 }
 
 struct quic_shash_head *quic_listen_sock_head(u32 hash)
@@ -80,26 +85,31 @@ struct quic_shash_head *quic_listen_sock_head(u32 hash)
 	return &quic_hashinfo.lhash.hash[hash];
 }
 
-struct quic_shash_head *quic_source_conn_id_head(struct net *net, u8 *scid, u32 len)
+struct quic_shash_head *quic_source_conn_id_head(struct net *net, u8 *scid,
+						 u32 len)
 {
+	u32 hash = jhash_2words(jhash(scid, len, 0), net_hash_mix(net), 0);
 	struct quic_shash_table *ht = &quic_hashinfo.shash;
 
-	return &ht->hash[jhash_2words(jhash(scid, len, 0), net_hash_mix(net), 0) & (ht->size - 1)];
+	return &ht->hash[hash & (ht->size - 1)];
 }
 
 struct quic_uhash_head *quic_udp_sock_head(struct net *net, u16 port)
 {
+	u32 hash = jhash_2words((__force u32)port, net_hash_mix(net), 0);
 	struct quic_uhash_table *ht = &quic_hashinfo.uhash;
 
-	return &ht->hash[jhash_2words((__force u32)port, net_hash_mix(net), 0) & (ht->size - 1)];
+	return &ht->hash[hash & (ht->size - 1)];
 }
 
 u32 quic_addr_hash(struct net *net, union quic_addr *a)
 {
-	u32 addr = (a->sa.sa_family == AF_INET6) ? jhash(&a->v6.sin6_addr, 16, 0) :
-						   (__force u32)a->v4.sin_addr.s_addr;
+	u32 addr = (a->sa.sa_family == AF_INET6) ?
+		   jhash(&a->v6.sin6_addr, 16, 0) :
+		   (__force u32)a->v4.sin_addr.s_addr;
 
-	return  jhash_3words(addr, (__force u32)a->v4.sin_port, net_hash_mix(net), 0);
+	return jhash_3words(addr, (__force u32)a->v4.sin_port,
+			    net_hash_mix(net), 0);
 }
 
 void quic_hash_tables_destroy(void)
@@ -177,7 +187,9 @@ err:
 	return err;
 }
 
-/* Returns the number of bytes required to encode a QUIC variable-length integer. */
+/* Returns the number of bytes required to encode a QUIC variable-length
+ * integer.
+ */
 u8 quic_var_len(u64 n)
 {
 	if (n <= QUIC_VARINT_1BYTE_MAX)
@@ -343,7 +355,9 @@ u8 *quic_put_data(u8 *p, u8 *data, u32 len)
 	return p + len;
 }
 
-/* Writes a transport parameter as two varints: ID and value length, followed by value. */
+/* Writes a transport parameter as two varints: ID and value length, followed
+ * by value.
+ */
 u8 *quic_put_param(u8 *p, u16 id, u64 value)
 {
 	p = quic_put_var(p, id);

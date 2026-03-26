@@ -21,7 +21,7 @@
 #define QUIC_CONN_ID_MAX_LEN	20
 #define QUIC_CONN_ID_DEF_LEN	8
 
-#define QUIC_PN_MAX_LEN		4	/* For encoded packet number */
+#define QUIC_PN_MAX_LEN		4 /* For encoded packet number */
 #define QUIC_PN_BITS		62
 #define QUIC_PN_MAX		(BIT_ULL(QUIC_PN_BITS) - 1)
 
@@ -30,7 +30,8 @@ struct quic_conn_id {
 	u8 len;
 };
 
-static inline void quic_conn_id_update(struct quic_conn_id *conn_id, u8 *data, u32 len)
+static inline void quic_conn_id_update(struct quic_conn_id *conn_id, u8 *data,
+				       u32 len)
 {
 	/* The caller must ensure len does not exceed QUIC_CONN_ID_MAX_LEN. */
 	if (WARN_ON_ONCE(len > QUIC_CONN_ID_MAX_LEN))
@@ -40,28 +41,30 @@ static inline void quic_conn_id_update(struct quic_conn_id *conn_id, u8 *data, u
 }
 
 struct quic_skb_cb {
-	/* Callback and temporary context when encryption/decryption completes in async mode */
+	/* Callback and temporary context when encryption/decryption completes
+	 * in async mode
+	 */
 	void (*crypto_done)(struct sk_buff *skb, int err);
 	void *crypto_ctx;
 	union {
-		struct sk_buff *last;	/* Last packet in bundle on TX */
-		u64 time;		/* Arrival timestamp in UDP tunnel on RX */
+		struct sk_buff *last; /* Last packet in bundle on TX */
+		u64 time; /* Arrival timestamp in UDP tunnel on RX */
 	};
-	s64 number;		/* Parsed packet number, or the largest previously seen */
-	u32 seqno;		/* Dest connection ID number on RX */
-	u16 errcode;		/* Error code if encryption/decryption fails */
-	u16 length;		/* Payload length + packet number length */
+	s64 number;  /* Parsed packet number, or the largest previously seen */
+	u32 seqno;   /* Dest connection ID number on RX */
+	u16 errcode; /* Error code if encryption/decryption fails */
+	u16 length;  /* Payload length + packet number length */
 
-	u16 number_offset;	/* Offset of packet number field */
-	u8 number_len;		/* Length of the packet number field */
-	u8 level;		/* Encryption level: Initial, Handshake, App, or Early */
+	u16 number_offset; /* Offset of packet number field */
+	u8 number_len;     /* Length of the packet number field */
+	u8 level; /* Encryption level: Initial, Handshake, App, or Early */
 
-	u8 key_update:1;	/* Key update triggered by this packet */
-	u8 key_phase:1;		/* Key phase used (0 or 1) */
-	u8 backlog:1;		/* Enqueued into backlog list */
-	u8 resume:1;		/* Crypto already processed (encrypted or decrypted) */
-	u8 path:1;		/* Packet arrived from a new or migrating path */
-	u8 ecn:2;		/* ECN marking used on TX */
+	u8 key_update:1; /* Key update triggered by this packet */
+	u8 key_phase:1;  /* Key phase used (0 or 1) */
+	u8 backlog:1;    /* Enqueued into backlog list */
+	u8 resume:1;     /* Crypto already processed (encrypted or decrypted) */
+	u8 path:1;       /* Packet arrived from a new or migrating path */
+	u8 ecn:2;        /* ECN marking used on TX */
 };
 
 #define QUIC_SKB_CB(skb)	((struct quic_skb_cb *)&((skb)->cb[0]))
@@ -123,7 +126,7 @@ static inline union quic_addr *quic_addr(const void *addr)
 
 struct quic_shash_head {
 	struct hlist_nulls_head	head;
-	spinlock_t		lock;	/* Protects 'head' in atomic context */
+	spinlock_t		lock; /* Protects 'head' in atomic context */
 };
 
 struct quic_shash_table {
@@ -133,7 +136,7 @@ struct quic_shash_table {
 
 struct quic_uhash_head {
 	struct hlist_head	head;
-	struct mutex		lock;	/* Protects 'head' in process context */
+	struct mutex		lock; /* Protects 'head' in process context */
 };
 
 struct quic_uhash_table {
@@ -146,7 +149,8 @@ struct quic_data {
 	u32 len;
 };
 
-static inline struct quic_data *quic_data(struct quic_data *d, u8 *data, u32 len)
+static inline struct quic_data *quic_data(struct quic_data *d, u8 *data,
+					  u32 len)
 {
 	d->data = data;
 	d->len  = len;
@@ -178,7 +182,8 @@ u32 quic_listen_sock_hash(struct net *net, u16 port);
 struct quic_shash_head *quic_listen_sock_head(u32 hash);
 u32 quic_listen_sock_hash_size(void);
 
-struct quic_shash_head *quic_source_conn_id_head(struct net *net, u8 *scid, u32 len);
+struct quic_shash_head *quic_source_conn_id_head(struct net *net, u8 *scid,
+						 u32 len);
 struct quic_uhash_head *quic_udp_sock_head(struct net *net, u16 port);
 u32 quic_addr_hash(struct net *net, union quic_addr *a);
 
