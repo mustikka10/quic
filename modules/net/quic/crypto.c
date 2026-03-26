@@ -25,8 +25,10 @@
 static u8 quic_random_data[QUIC_RANDOM_DATA_LEN] __read_mostly;
 
 /* HKDF-Extract. */
-static int quic_crypto_hkdf_extract(struct crypto_shash *tfm, struct quic_data *srt,
-				    struct quic_data *hash, struct quic_data *key)
+static int quic_crypto_hkdf_extract(struct crypto_shash *tfm,
+				    struct quic_data *srt,
+				    struct quic_data *hash,
+				    struct quic_data *key)
 {
 	int err;
 
@@ -40,8 +42,10 @@ static int quic_crypto_hkdf_extract(struct crypto_shash *tfm, struct quic_data *
 #define QUIC_MAX_INFO_LEN	256
 
 /* HKDF-Expand-Label. */
-static int quic_crypto_hkdf_expand(struct crypto_shash *tfm, struct quic_data *srt,
-				   struct quic_data *label, struct quic_data *hash,
+static int quic_crypto_hkdf_expand(struct crypto_shash *tfm,
+				   struct quic_data *srt,
+				   struct quic_data *label,
+				   struct quic_data *hash,
 				   struct quic_data *key)
 {
 	u8 cnt = 1, info[QUIC_MAX_INFO_LEN], *p = info, *prev = NULL;
@@ -120,9 +124,10 @@ out:
 
 /* rfc9369#section-3.3.2:
  *
- * The labels used in rfc9001 to derive packet protection keys, header protection keys, Retry
- * Integrity Tag keys, and key updates change from "quic key" to "quicv2 key", from "quic iv"
- * to "quicv2 iv", from "quic hp" to "quicv2 hp", and from "quic ku" to "quicv2 ku".
+ * The labels used in rfc9001 to derive packet protection keys, header
+ * protection keys, Retry Integrity Tag keys, and key updates change from "quic
+ * key" to "quicv2 key", from "quic iv" to "quicv2 iv", from "quic hp" to
+ * "quicv2 hp", and from "quic ku" to "quicv2 ku".
  */
 #define KEY_LABEL_V2		"quicv2 key"
 #define IV_LABEL_V2		"quicv2 iv"
@@ -131,9 +136,10 @@ out:
 #define KU_LABEL_V2		"quicv2 ku"
 
 /* Packet Protection Keys. */
-static int quic_crypto_keys_derive(struct crypto_shash *tfm, struct quic_data *s,
-				   struct quic_data *k, struct quic_data *i,
-				   struct quic_data *hp_k, u32 version)
+static int quic_crypto_keys_derive(struct crypto_shash *tfm,
+				   struct quic_data *s, struct quic_data *k,
+				   struct quic_data *i, struct quic_data *hp_k,
+				   u32 version)
 {
 	struct quic_data hp_k_l = {HP_KEY_LABEL_V1, strlen(HP_KEY_LABEL_V1)};
 	struct quic_data k_l = {KEY_LABEL_V1, strlen(KEY_LABEL_V1)};
@@ -143,10 +149,11 @@ static int quic_crypto_keys_derive(struct crypto_shash *tfm, struct quic_data *s
 
 	/* rfc9001#section-5.1:
 	 *
-	 * The current encryption level secret and the label "quic key" are input to the
-	 * KDF to produce the AEAD key; the label "quic iv" is used to derive the
-	 * Initialization Vector (IV). The header protection key uses the "quic hp" label.
-	 * Using these labels provides key separation between QUIC and TLS.
+	 * The current encryption level secret and the label "quic key" are
+	 * input to the KDF to produce the AEAD key; the label "quic iv" is
+	 * used to derive the Initialization Vector (IV). The header protection
+	 * key uses the "quic hp" label.  Using these labels provides key
+	 * separation between QUIC and TLS.
 	 */
 	if (version == QUIC_VERSION_V2) {
 		quic_data(&hp_k_l, HP_KEY_LABEL_V2, strlen(HP_KEY_LABEL_V2));
@@ -167,10 +174,12 @@ static int quic_crypto_keys_derive(struct crypto_shash *tfm, struct quic_data *s
 	return quic_crypto_hkdf_expand(tfm, s, &hp_k_l, &z, hp_k);
 }
 
-/* Derive and install reception (RX) or transmission (TX) packet protection keys for the current
- * key phase.  This installs AEAD protection key, IV, and optionally header protection key.
+/* Derive and install reception (RX) or transmission (TX) packet protection
+ * keys for the current key phase.  This installs AEAD protection key, IV, and
+ * optionally header protection key.
  */
-static int quic_crypto_keys_derive_and_install(struct quic_crypto *crypto, bool rx)
+static int quic_crypto_keys_derive_and_install(struct quic_crypto *crypto,
+					       bool rx)
 {
 	struct quic_data srt = {}, k, iv, hp_k = {}, *hp = NULL;
 	u8 key[QUIC_KEY_LEN], hp_key[QUIC_KEY_LEN] = {};
@@ -197,7 +206,8 @@ static int quic_crypto_keys_derive_and_install(struct quic_crypto *crypto, bool 
 	/* Only derive header protection key when not in key update. */
 	if (!crypto->key_pending)
 		hp = quic_data(&hp_k, hp_key, keylen);
-	err = quic_crypto_keys_derive(crypto->secret_tfm, &srt, &k, &iv, hp, crypto->version);
+	err = quic_crypto_keys_derive(crypto->secret_tfm, &srt, &k, &iv, hp,
+				      crypto->version);
 	if (err)
 		goto out;
 	err = crypto_aead_setauthsize(tfm, QUIC_TAG_LEN);
@@ -219,8 +229,9 @@ out:
 	return err;
 }
 
-static void *quic_crypto_skcipher_mem_alloc(struct crypto_skcipher *tfm, u32 mask_size,
-					    u8 **iv, struct skcipher_request **req)
+static void *quic_crypto_skcipher_mem_alloc(struct crypto_skcipher *tfm,
+					    u32 mask_size, u8 **iv,
+					    struct skcipher_request **req)
 {
 	unsigned int iv_size, req_size;
 	unsigned int len;
@@ -231,7 +242,8 @@ static void *quic_crypto_skcipher_mem_alloc(struct crypto_skcipher *tfm, u32 mas
 
 	len = mask_size;
 	len += iv_size;
-	len += crypto_skcipher_alignmask(tfm) & ~(crypto_tfm_ctx_alignment() - 1);
+	len += crypto_skcipher_alignmask(tfm) &
+	       ~(crypto_tfm_ctx_alignment() - 1);
 	len = ALIGN(len, crypto_tfm_ctx_alignment());
 	len += req_size;
 
@@ -239,7 +251,8 @@ static void *quic_crypto_skcipher_mem_alloc(struct crypto_skcipher *tfm, u32 mas
 	if (!mem)
 		return NULL;
 
-	*iv = (u8 *)PTR_ALIGN(mem + mask_size, crypto_skcipher_alignmask(tfm) + 1);
+	*iv = (u8 *)PTR_ALIGN(mem + mask_size,
+			      crypto_skcipher_alignmask(tfm) + 1);
 	*req = (struct skcipher_request *)PTR_ALIGN(*iv + iv_size,
 			crypto_tfm_ctx_alignment());
 
@@ -256,9 +269,10 @@ static int quic_crypto_get_number(struct sk_buff *skb)
 
 	/* rfc9000#section-17.1:
 	 *
-	 * Once header protection is removed, the packet number is decoded by finding the packet
-	 * number value that is closest to the next expected packet. The next expected packet is
-	 * the highest received packet number plus one.
+	 * Once header protection is removed, the packet number is decoded by
+	 * finding the packet number value that is closest to the next expected
+	 * packet. The next expected packet is the highest received packet
+	 * number plus one.
 	 */
 	p = (u8 *)quic_hdr(skb) + cb->number_offset;
 	if (!quic_get_int(&p, &len, &cb->number, cb->number_len))
@@ -274,14 +288,15 @@ static int quic_crypto_get_number(struct sk_buff *skb)
 #define QUIC_SHORT_HEADER_MASK	0x1f
 
 /* Header Protection. */
-static int quic_crypto_header_protect(struct crypto_skcipher *tfm, struct sk_buff *skb,
-				      bool chacha, bool enc)
+static int quic_crypto_header_protect(struct crypto_skcipher *tfm,
+				      struct sk_buff *skb, bool chacha,
+				      bool enc)
 {
 	struct quic_skb_cb *cb = QUIC_SKB_CB(skb);
 	struct skcipher_request *req;
+	u8 *mask, *iv, *p, h_mask;
 	struct sk_buff *trailer;
 	struct scatterlist sg;
-	u8 *mask, *iv, *p;
 	int err, i;
 
 	if (!enc) {
@@ -316,8 +331,8 @@ static int quic_crypto_header_protect(struct crypto_skcipher *tfm, struct sk_buf
 	 *     nonce = sample[4..15]
 	 *     mask = ChaCha20(hp_key, counter, nonce, {0,0,0,0,0})
 	 */
-	memcpy((chacha ? iv : mask), skb->data + cb->number_offset + QUIC_PN_MAX_LEN,
-	       QUIC_SAMPLE_LEN);
+	p = skb->data + cb->number_offset + QUIC_PN_MAX_LEN;
+	memcpy((chacha ? iv : mask), p, QUIC_SAMPLE_LEN);
 	sg_init_one(&sg, mask, QUIC_SAMPLE_LEN);
 	skcipher_request_set_tfm(req, tfm);
 	skcipher_request_set_crypt(req, &sg, &sg, QUIC_SAMPLE_LEN, iv);
@@ -341,8 +356,9 @@ static int quic_crypto_header_protect(struct crypto_skcipher *tfm, struct sk_buf
 	 * packet[pn_offset:pn_offset+pn_length] ^= mask[1:1+pn_length]
 	 */
 	p = skb->data;
-	*p = (u8)(*p ^ (mask[0] & (((*p & QUIC_HEADER_FORM_BIT) == QUIC_HEADER_FORM_BIT) ?
-				   QUIC_LONG_HEADER_MASK : QUIC_SHORT_HEADER_MASK)));
+	h_mask = ((*p & QUIC_HEADER_FORM_BIT) == QUIC_HEADER_FORM_BIT) ?
+		 QUIC_LONG_HEADER_MASK : QUIC_SHORT_HEADER_MASK;
+	*p = (u8)(*p ^ (mask[0] & h_mask));
 	if (!enc) {
 		cb->key_phase = quic_hdr(skb)->key;
 		cb->number_len = quic_hdr(skb)->pnl + 1;
@@ -406,8 +422,9 @@ static void quic_crypto_done(void *data, int err)
 }
 
 /* AEAD Usage. */
-static int quic_crypto_payload_protect(struct crypto_aead *tfm, struct sk_buff *skb,
-				       u8 *base_iv, bool ccm, bool enc)
+static int quic_crypto_payload_protect(struct crypto_aead *tfm,
+				       struct sk_buff *skb, u8 *base_iv,
+				       bool ccm, bool enc)
 {
 	struct quic_skb_cb *cb = QUIC_SKB_CB(skb);
 	u8 *iv, i, nonce[QUIC_IV_LEN];
@@ -448,14 +465,15 @@ static int quic_crypto_payload_protect(struct crypto_aead *tfm, struct sk_buff *
 
 	/* rfc9001#section-5.3:
 	 *
-	 * The associated data, A, for the AEAD is the contents of the QUIC header,
-	 * starting from the first byte of either the short or long header, up to and
-	 * including the unprotected packet number.
+	 * The associated data, A, for the AEAD is the contents of the QUIC
+	 * header, starting from the first byte of either the short or long
+	 * header, up to and including the unprotected packet number.
 	 *
-	 * The nonce, N, is formed by combining the packet protection IV with the packet
-	 * number.  The 62 bits of the reconstructed QUIC packet number in network byte
-	 * order are left-padded with zeros to the size of the IV. The exclusive OR of the
-	 * padded packet number and the IV forms the AEAD nonce.
+	 * The nonce, N, is formed by combining the packet protection IV with
+	 * the packet number.  The 62 bits of the reconstructed QUIC packet
+	 * number in network byte order are left-padded with zeros to the size
+	 * of the IV. The exclusive OR of the padded packet number and the IV
+	 * forms the AEAD nonce.
 	 */
 	memcpy(nonce, base_iv, QUIC_IV_LEN);
 	n = cpu_to_be64(cb->number);
@@ -468,9 +486,10 @@ static int quic_crypto_payload_protect(struct crypto_aead *tfm, struct sk_buff *
 	aead_request_set_tfm(req, tfm);
 	aead_request_set_ad(req, hlen);
 	aead_request_set_crypt(req, sg, sg, len - hlen, iv);
-	aead_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG, (void *)quic_crypto_done, skb);
+	aead_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG,
+				  (void *)quic_crypto_done, skb);
 
-	cb->crypto_ctx = ctx; /* Set crypto_ctx for async free in quic_crypto_done(). */
+	cb->crypto_ctx = ctx; /* Async free context for quic_crypto_done() */
 	err = enc ? crypto_aead_encrypt(req) : crypto_aead_decrypt(req);
 	if (err == -EINPROGRESS || err == -EBUSY) {
 		memzero_explicit(nonce, sizeof(nonce));
@@ -491,18 +510,21 @@ err:
 #define TLS_CIPHER_AES_CCM_128_SECRET_SIZE		32
 #define TLS_CIPHER_CHACHA20_POLY1305_SECRET_SIZE	32
 
-#define CIPHER_DESC(type, aead_name, skc_name, sha_name)[type - QUIC_CIPHER_MIN] = { \
+#define CIPHER_DESC(type, aead_n, skc_n, sha_n)[type - QUIC_CIPHER_MIN] = { \
 	.secretlen = type ## _SECRET_SIZE, \
 	.keylen = type ## _KEY_SIZE, \
-	.aead = aead_name, \
-	.skc = skc_name, \
-	.shash = sha_name, \
+	.aead = aead_n, \
+	.skc = skc_n, \
+	.shash = sha_n, \
 }
 
 static struct quic_cipher ciphers[QUIC_CIPHER_MAX + 1 - QUIC_CIPHER_MIN] = {
-	CIPHER_DESC(TLS_CIPHER_AES_GCM_128, "gcm(aes)", "ecb(aes)", "hmac(sha256)"),
-	CIPHER_DESC(TLS_CIPHER_AES_GCM_256, "gcm(aes)", "ecb(aes)", "hmac(sha384)"),
-	CIPHER_DESC(TLS_CIPHER_AES_CCM_128, "ccm(aes)", "ecb(aes)", "hmac(sha256)"),
+	CIPHER_DESC(TLS_CIPHER_AES_GCM_128,
+		    "gcm(aes)", "ecb(aes)", "hmac(sha256)"),
+	CIPHER_DESC(TLS_CIPHER_AES_GCM_256,
+		    "gcm(aes)", "ecb(aes)", "hmac(sha384)"),
+	CIPHER_DESC(TLS_CIPHER_AES_CCM_128,
+		    "ccm(aes)", "ecb(aes)", "hmac(sha256)"),
 	CIPHER_DESC(TLS_CIPHER_CHACHA20_POLY1305,
 		    "rfc7539(chacha20,poly1305)", "chacha20", "hmac(sha256)"),
 };
@@ -517,9 +539,9 @@ static bool quic_crypto_is_cipher_chacha(struct quic_crypto *crypto)
 	return crypto->cipher_type == TLS_CIPHER_CHACHA20_POLY1305;
 }
 
-/* Encrypts a QUIC packet before transmission.  This function performs AEAD encryption of
- * the packet payload and applies header protection. It handles key phase tracking and key
- * update timing.
+/* Encrypts a QUIC packet before transmission.  This function performs AEAD
+ * encryption of the packet payload and applies header protection. It handles
+ * key phase tracking and key update timing.
  *
  * Return: 0 on success, or a negative error code.
  */
@@ -531,21 +553,22 @@ int quic_crypto_encrypt(struct quic_crypto *crypto, struct sk_buff *skb)
 
 	cb->key_phase = phase;
 	iv = crypto->tx_iv[phase];
-	/* Packet payload is already encrypted (e.g., resumed from async), proceed to header
-	 * protection only.
+	/* Packet payload is already encrypted (e.g., resumed from async),
+	 * proceed to header protection only.
 	 */
 	if (cb->resume)
 		goto out;
 
-	/* If a key update is pending and this is the first packet using the new key, save the
-	 * current time. Later used to clear old keys after some time has passed (see
-	 * quic_crypto_decrypt()).
+	/* If a key update is pending and this is the first packet using the
+	 * new key, save the current time. Later used to clear old keys after
+	 * some time has passed (see quic_crypto_decrypt()).
 	 */
 	if (crypto->key_pending && !crypto->key_update_send_time)
 		crypto->key_update_send_time = quic_ktime_get_us();
 
 	ccm = quic_crypto_is_cipher_ccm(crypto);
-	err = quic_crypto_payload_protect(crypto->tx_tfm[phase], skb, iv, ccm, true);
+	err = quic_crypto_payload_protect(crypto->tx_tfm[phase], skb, iv, ccm,
+					  true);
 	if (err)
 		return err;
 out:
@@ -554,8 +577,9 @@ out:
 }
 EXPORT_SYMBOL_GPL(quic_crypto_encrypt);
 
-/* Decrypts a QUIC packet after reception.  This function removes header protection,
- * decrypts the payload, and processes any key updates if the key phase bit changes.
+/* Decrypts a QUIC packet after reception.  This function removes header
+ * protection, decrypts the payload, and processes any key updates if the key
+ * phase bit changes.
  *
  * Return: 0 on success, or a negative error code.
  */
@@ -566,8 +590,8 @@ int quic_crypto_decrypt(struct quic_crypto *crypto, struct sk_buff *skb)
 	int err = 0;
 	u64 time;
 
-	/* Payload was decrypted asynchronously.  Proceed with parsing packet number and key
-	 * phase.
+	/* Payload was decrypted asynchronously.  Proceed with parsing packet
+	 * number and key phase.
 	 */
 	if (cb->resume) {
 		err = quic_crypto_get_number(skb);
@@ -577,7 +601,8 @@ int quic_crypto_decrypt(struct quic_crypto *crypto, struct sk_buff *skb)
 	}
 	if (!cb->number_len) { /* Packet header not yet decrypted. */
 		cha = quic_crypto_is_cipher_chacha(crypto);
-		err = quic_crypto_header_protect(crypto->rx_hp_tfm, skb, cha, false);
+		err = quic_crypto_header_protect(crypto->rx_hp_tfm, skb, cha,
+						 false);
 		if (err) {
 			pr_debug("%s: hd decrypt err %d\n", __func__, err);
 			return err;
@@ -586,17 +611,17 @@ int quic_crypto_decrypt(struct quic_crypto *crypto, struct sk_buff *skb)
 
 	/* rfc9001#section-6:
 	 *
-	 * The Key Phase bit allows a recipient to detect a change in keying material without
-	 * needing to receive the first packet that triggered the change. An endpoint that
-	 * notices a changed Key Phase bit updates keys and decrypts the packet that contains
-	 * the changed value.
+	 * The Key Phase bit allows a recipient to detect a change in keying
+	 * material without needing to receive the first packet that triggered
+	 * the change. An endpoint that notices a changed Key Phase bit updates
+	 * keys and decrypts the packet that contains the changed value.
 	 */
 	if (cb->key_phase != crypto->key_phase && !crypto->key_pending) {
 		if (!crypto->send_ready) /* Not ready for key update. */
 			return -EINVAL;
-		if (!cb->backlog) /* Key update must be done in process context. */
+		if (!cb->backlog) /* Key update requires process context */
 			return -EKEYREVOKED;
-		err = quic_crypto_key_update(crypto); /* Perform a key update. */
+		err = quic_crypto_key_update(crypto); /* Perform key update. */
 		if (err) {
 			cb->errcode = QUIC_TRANSPORT_ERROR_KEY_UPDATE;
 			return err;
@@ -607,13 +632,15 @@ int quic_crypto_decrypt(struct quic_crypto *crypto, struct sk_buff *skb)
 	phase = cb->key_phase;
 	iv = crypto->rx_iv[phase];
 	ccm = quic_crypto_is_cipher_ccm(crypto);
-	err = quic_crypto_payload_protect(crypto->rx_tfm[phase], skb, iv, ccm, false);
+	err = quic_crypto_payload_protect(crypto->rx_tfm[phase], skb, iv, ccm,
+					  false);
 	if (err) {
 		if (err == -EINPROGRESS)
 			return err;
-		/* When using the old keys can not decrypt the packets, the peer might
-		 * start another key_update. Thus, clear the last key_pending so that
-		 * next packets will trigger the new key-update.
+		/* When using the old keys can not decrypt the packets, the
+		 * peer might start another key_update. Thus, clear the last
+		 * key_pending so that next packets will trigger the new
+		 * key-update.
 		 */
 		if (crypto->key_pending && cb->key_phase != crypto->key_phase) {
 			crypto->key_pending = 0;
@@ -626,13 +653,15 @@ int quic_crypto_decrypt(struct quic_crypto *crypto, struct sk_buff *skb)
 out:
 	/* rfc9001#section-6.1:
 	 *
-	 * An endpoint MUST retain old keys until it has successfully unprotected a
-	 * packet sent using the new keys. An endpoint SHOULD retain old keys for
-	 * some time after unprotecting a packet sent using the new keys.
+	 * An endpoint MUST retain old keys until it has successfully
+	 * unprotected a packet sent using the new keys. An endpoint SHOULD
+	 * retain old keys for some time after unprotecting a packet sent using
+	 * the new keys.
 	 */
 	if (crypto->key_pending && cb->key_phase == crypto->key_phase) {
 		time = crypto->key_update_send_time;
-		if (time && quic_ktime_get_us() - time >= crypto->key_update_time) {
+		if (time &&
+		    quic_ktime_get_us() - time >= crypto->key_update_time) {
 			crypto->key_pending = 0;
 			crypto->key_update_time = 0;
 			crypto->key_update_send_time = 0;
@@ -715,7 +744,8 @@ err:
 	return err;
 }
 
-int quic_crypto_set_secret(struct quic_crypto *crypto, struct quic_crypto_secret *srt,
+int quic_crypto_set_secret(struct quic_crypto *crypto,
+			   struct quic_crypto_secret *srt,
 			   u32 version, u32 flag)
 {
 	struct quic_cipher *cipher;
@@ -751,7 +781,8 @@ int quic_crypto_set_secret(struct quic_crypto *crypto, struct quic_crypto_secret
 }
 EXPORT_SYMBOL_GPL(quic_crypto_set_secret);
 
-int quic_crypto_get_secret(struct quic_crypto *crypto, struct quic_crypto_secret *srt)
+int quic_crypto_get_secret(struct quic_crypto *crypto,
+			   struct quic_crypto_secret *srt)
 {
 	u8 *secret;
 
@@ -777,14 +808,16 @@ int quic_crypto_key_update(struct quic_crypto *crypto)
 
 	/* rfc9001#section-6.1:
 	 *
-	 * Endpoints maintain separate read and write secrets for packet protection. An
-	 * endpoint initiates a key update by updating its packet protection write secret
-	 * and using that to protect new packets. The endpoint creates a new write secret
-	 * from the existing write secret. This uses the KDF function provided by TLS with
-	 * a label of "quic ku". The corresponding key and IV are created from that
-	 * secret. The header protection key is not updated.
+	 * Endpoints maintain separate read and write secrets for packet
+	 * protection. An endpoint initiates a key update by updating its
+	 * packet protection write secret and using that to protect new
+	 * packets. The endpoint creates a new write secret from the existing
+	 * write secret. This uses the KDF function provided by TLS with a
+	 * label of "quic ku". The corresponding key and IV are created from
+	 * that secret. The header protection key is not updated.
 	 *
-	 * For example, to update write keys with TLS 1.3, HKDF-Expand-Label is used as:
+	 * For example, to update write keys with TLS 1.3, HKDF-Expand-Label is
+	 * used as:
 	 *   secret_<n+1> = HKDF-Expand-Label(secret_<n>, "quic ku",
 	 *                                    "", Hash.length)
 	 */
@@ -850,15 +883,19 @@ void quic_crypto_free(struct quic_crypto *crypto)
 }
 EXPORT_SYMBOL_GPL(quic_crypto_free);
 
-#define QUIC_INITIAL_SALT_V1    \
-	"\x38\x76\x2c\xf7\xf5\x59\x34\xb3\x4d\x17\x9a\xe6\xa4\xc8\x0c\xad\xcc\xbb\x7f\x0a"
-#define QUIC_INITIAL_SALT_V2    \
-	"\x0d\xed\xe3\xde\xf7\x00\xa6\xdb\x81\x93\x81\xbe\x6e\x26\x9d\xcb\xf9\xbd\x2e\xd9"
+#define QUIC_INITIAL_SALT_V1 \
+	"\x38\x76\x2c\xf7\xf5\x59\x34\xb3\x4d\x17" \
+	"\x9a\xe6\xa4\xc8\x0c\xad\xcc\xbb\x7f\x0a"
+
+#define QUIC_INITIAL_SALT_V2 \
+	"\x0d\xed\xe3\xde\xf7\x00\xa6\xdb\x81\x93" \
+	"\x81\xbe\x6e\x26\x9d\xcb\xf9\xbd\x2e\xd9"
 
 #define QUIC_INITIAL_SALT_LEN	20
 
 /* Initial Secrets. */
-int quic_crypto_initial_keys_install(struct quic_crypto *crypto, struct quic_conn_id *conn_id,
+int quic_crypto_initial_keys_install(struct quic_crypto *crypto,
+				     struct quic_conn_id *conn_id,
 				     u32 version, bool is_serv)
 {
 	u8 secret[TLS_CIPHER_AES_GCM_128_SECRET_SIZE];
@@ -869,11 +906,12 @@ int quic_crypto_initial_keys_install(struct quic_crypto *crypto, struct quic_con
 
 	/* rfc9001#section-5.2:
 	 *
-	 * The secret used by clients to construct Initial packets uses the PRK and the
-	 * label "client in" as input to the HKDF-Expand-Label function from TLS [TLS13]
-	 * to produce a 32-byte secret. Packets constructed by the server use the same
-	 * process with the label "server in". The hash function for HKDF when deriving
-	 * initial secrets and keys is SHA-256 [SHA].
+	 * The secret used by clients to construct Initial packets uses the PRK
+	 * and the label "client in" as input to the HKDF-Expand-Label function
+	 * from TLS [TLS13] to produce a 32-byte secret. Packets constructed by
+	 * the server use the same process with the label "server in". The hash
+	 * function for HKDF when deriving initial secrets and keys is SHA-256
+	 * [SHA].
 	 *
 	 * This process in pseudocode is:
 	 *
@@ -931,8 +969,10 @@ out:
 }
 EXPORT_SYMBOL_GPL(quic_crypto_initial_keys_install);
 
-#define QUIC_RETRY_KEY_V1 "\xbe\x0c\x69\x0b\x9f\x66\x57\x5a\x1d\x76\x6b\x54\xe3\x68\xc8\x4e"
-#define QUIC_RETRY_KEY_V2 "\x8f\xb4\xb0\x1b\x56\xac\x48\xe2\x60\xfb\xcb\xce\xad\x7c\xcc\x92"
+#define QUIC_RETRY_KEY_V1 \
+	"\xbe\x0c\x69\x0b\x9f\x66\x57\x5a\x1d\x76\x6b\x54\xe3\x68\xc8\x4e"
+#define QUIC_RETRY_KEY_V2 \
+	"\x8f\xb4\xb0\x1b\x56\xac\x48\xe2\x60\xfb\xcb\xce\xad\x7c\xcc\x92"
 
 #define QUIC_RETRY_NONCE_V1 "\x46\x15\x99\xd3\x5d\x63\x2b\xf2\x23\x98\x25\xbb"
 #define QUIC_RETRY_NONCE_V2 "\xd8\x69\x69\xbc\x2d\x7c\x6d\x99\x90\xef\xb0\x4a"
@@ -953,17 +993,20 @@ int quic_crypto_get_retry_tag(struct quic_crypto *crypto, struct sk_buff *skb,
 
 	/* rfc9001#section-5.8:
 	 *
-	 * The Retry Integrity Tag is a 128-bit field that is computed as the output of
-	 * AEAD_AES_128_GCM used with the following inputs:
+	 * The Retry Integrity Tag is a 128-bit field that is computed as the
+	 * output of AEAD_AES_128_GCM used with the following inputs:
 	 *
-	 * - The secret key, K, is 128 bits equal to 0xbe0c690b9f66575a1d766b54e368c84e.
+	 * - The secret key, K, is 128 bits equal to
+	 *   0xbe0c690b9f66575a1d766b54e368c84e.
 	 * - The nonce, N, is 96 bits equal to 0x461599d35d632bf2239825bb.
 	 * - The plaintext, P, is empty.
-	 * - The associated data, A, is the contents of the Retry Pseudo-Packet,
+	 * - The associated data, A, is the contents of the Retry
+	 *   Pseudo-Packet,
 	 *
-	 * The Retry Pseudo-Packet is not sent over the wire. It is computed by taking the
-	 * transmitted Retry packet, removing the Retry Integrity Tag, and prepending the
-	 * two following fields: ODCID Length + Original Destination Connection ID (ODCID).
+	 * The Retry Pseudo-Packet is not sent over the wire. It is computed by
+	 * taking the transmitted Retry packet, removing the Retry Integrity
+	 * Tag, and prepending the two following fields: ODCID Length +
+	 * Original Destination Connection ID (ODCID).
 	 */
 	err = crypto_aead_setauthsize(tfm, QUIC_TAG_LEN);
 	if (err)
@@ -975,8 +1018,10 @@ int quic_crypto_get_retry_tag(struct quic_crypto *crypto, struct sk_buff *skb,
 	if (err)
 		return err;
 
+	/* The caller must ensure skb->len > QUIC_TAG_LEN. */
 	plen = 1 + odcid->len + skb->len - QUIC_TAG_LEN;
-	pseudo_retry = quic_crypto_aead_mem_alloc(tfm, plen + QUIC_TAG_LEN, &iv, &req, &sg, 1);
+	pseudo_retry = quic_crypto_aead_mem_alloc(tfm, plen + QUIC_TAG_LEN, &iv,
+						  &req, &sg, 1);
 	if (!pseudo_retry)
 		return -ENOMEM;
 
@@ -1002,13 +1047,15 @@ EXPORT_SYMBOL_GPL(quic_crypto_get_retry_tag);
 
 /* Initialize crypto for token operations.
  *
- * Derives a key and IV using HKDF, configures the AEAD transform, and allocates memory
- * for the token request. Used by both generation and verification paths.
+ * Derives a key and IV using HKDF, configures the AEAD transform, and
+ * allocates memory for the token request. Used by both generation and
+ * verification paths.
  *
  * Returns the token buffer on success or an ERR_PTR() on failure.
  */
-static void *quic_crypto_token_init(struct quic_crypto *crypto, u32 len, u8 **token_iv,
-				    struct aead_request **req, struct scatterlist **sg)
+static void *quic_crypto_token_init(struct quic_crypto *crypto, u32 len,
+				    u8 **token_iv, struct aead_request **req,
+				    struct scatterlist **sg)
 {
 	u8 key[TLS_CIPHER_AES_GCM_128_KEY_SIZE], iv[QUIC_IV_LEN];
 	struct crypto_aead *tfm = crypto->tag_tfm;
@@ -1019,7 +1066,8 @@ static void *quic_crypto_token_init(struct quic_crypto *crypto, u32 len, u8 **to
 	quic_data(&srt, quic_random_data, QUIC_RANDOM_DATA_LEN);
 	quic_data(&k, key, TLS_CIPHER_AES_GCM_128_KEY_SIZE);
 	quic_data(&i, iv, QUIC_IV_LEN);
-	err = quic_crypto_keys_derive(crypto->secret_tfm, &srt, &k, &i, NULL, QUIC_VERSION_V1);
+	err = quic_crypto_keys_derive(crypto->secret_tfm, &srt, &k, &i, NULL,
+				      QUIC_VERSION_V1);
 	if (err)
 		goto out;
 	err = crypto_aead_setauthsize(tfm, QUIC_TAG_LEN);
@@ -1042,17 +1090,19 @@ out:
 
 /* Generate a token for Retry or address validation.
  *
- * Builds a token with the format: [client address][timestamp][original DCID][auth tag]
+ * Builds a token with the format: [client address][timestamp][original
+ * DCID][auth tag]
  *
- * Encrypts the token (excluding the first flag byte) using AES-GCM with a key and IV
- * derived via HKDF. The original DCID is stored to be recovered later from a Client
- * Initial packet.  Ensures the token is bound to the client address and time, preventing
- * reuse or tampering.
+ * Encrypts the token (excluding the first flag byte) using AES-GCM with a key
+ * and IV derived via HKDF. The original DCID is stored to be recovered later
+ * from a Client Initial packet.  Ensures the token is bound to the client
+ * address and time, preventing reuse or tampering.
  *
  * Returns 0 on success or a negative error code on failure.
  */
-int quic_crypto_generate_token(struct quic_crypto *crypto, void *addr, u32 addrlen,
-			       struct quic_conn_id *conn_id, u8 *token, u32 *tlen)
+int quic_crypto_generate_token(struct quic_crypto *crypto, void *addr,
+			       u32 addrlen, struct quic_conn_id *conn_id,
+			       u8 *token, u32 *tlen)
 {
 	u64 ts = quic_ktime_get_us();
 	struct aead_request *req;
@@ -1088,15 +1138,18 @@ EXPORT_SYMBOL_GPL(quic_crypto_generate_token);
 
 /* Validate a Retry or address validation token.
  *
- * Decrypts the token using derived key and IV. Checks that the decrypted address matches
- * the provided address, validates the embedded timestamp against current time with a
- * version-specific timeout. If applicable, it extracts and returns the original
- * destination connection ID (ODCID) for Retry packets.
+ * Decrypts the token using derived key and IV. Checks that the decrypted
+ * address matches the provided address, validates the embedded timestamp
+ * against current time with a version-specific timeout. If applicable, it
+ * extracts and returns the original destination connection ID (ODCID) for
+ * Retry packets.
  *
- * Returns 0 if the token is valid, -EINVAL if invalid, or another negative error code.
+ * Returns 0 if the token is valid, -EINVAL if invalid, or another negative
+ * error code.
  */
-int quic_crypto_verify_token(struct quic_crypto *crypto, void *addr, u32 addrlen,
-			     struct quic_conn_id *conn_id, u8 *token, u32 len)
+int quic_crypto_verify_token(struct quic_crypto *crypto, void *addr,
+			     u32 addrlen, struct quic_conn_id *conn_id,
+			     u8 *token, u32 len)
 {
 	u64 t, ts = quic_ktime_get_us(), timeout = QUIC_TOKEN_TIMEOUT_RETRY;
 	u8 *token_buf, *iv, *p, flag = *token;
@@ -1148,9 +1201,12 @@ out:
 }
 EXPORT_SYMBOL_GPL(quic_crypto_verify_token);
 
-/* Generate a derived key using HKDF-Extract and HKDF-Expand with a given label. */
-static int quic_crypto_generate_key(struct quic_crypto *crypto, void *data, u32 len,
-				    char *label, u8 *token, u32 key_len)
+/* Generate a derived key using HKDF-Extract and HKDF-Expand with a given
+ * label.
+ */
+static int quic_crypto_generate_key(struct quic_crypto *crypto, void *data,
+				    u32 len, char *label, u8 *token,
+				    u32 key_len)
 {
 	struct crypto_shash *tfm = crypto->secret_tfm;
 	u8 secret[TLS_CIPHER_AES_GCM_128_SECRET_SIZE];
@@ -1173,18 +1229,22 @@ out:
 }
 
 /* Derive a stateless reset token from connection-specific input. */
-int quic_crypto_generate_stateless_reset_token(struct quic_crypto *crypto, void *data,
-					       u32 len, u8 *key, u32 key_len)
+int quic_crypto_generate_stateless_reset_token(struct quic_crypto *crypto,
+					       void *data, u32 len, u8 *key,
+					       u32 key_len)
 {
-	return quic_crypto_generate_key(crypto, data, len, "stateless_reset", key, key_len);
+	return quic_crypto_generate_key(crypto, data, len, "stateless_reset",
+					key, key_len);
 }
 EXPORT_SYMBOL_GPL(quic_crypto_generate_stateless_reset_token);
 
 /* Derive a session ticket key using HKDF from connection-specific input. */
-int quic_crypto_generate_session_ticket_key(struct quic_crypto *crypto, void *data,
-					    u32 len, u8 *key, u32 key_len)
+int quic_crypto_generate_session_ticket_key(struct quic_crypto *crypto,
+					    void *data, u32 len, u8 *key,
+					    u32 key_len)
 {
-	return quic_crypto_generate_key(crypto, data, len, "session_ticket", key, key_len);
+	return quic_crypto_generate_key(crypto, data, len, "session_ticket",
+					key, key_len);
 }
 EXPORT_SYMBOL_GPL(quic_crypto_generate_session_ticket_key);
 
