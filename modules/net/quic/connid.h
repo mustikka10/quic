@@ -16,22 +16,23 @@
 
 /* Common fields shared by both source and destination Connection IDs */
 struct quic_common_conn_id {
-	struct quic_conn_id id;	/* The actual Connection ID value and its length */
-	struct list_head list;	/* Linked list node for conn_id list management */
-	u32 number;		/* Sequence number assigned to this Connection ID */
-	u8 hashed;		/* Non-zero if this ID is stored in source_conn_id hashtable */
+	struct quic_conn_id id; /* Connection ID value and its length */
+	struct list_head list;  /* List node for connection ID management */
+	u32 number; /* Sequence number assigned to this Connection ID */
+	u8 hashed;  /* Non-zero if stored in source_conn_id hash table */
 };
 
 struct quic_source_conn_id {
 	struct quic_common_conn_id common;
-	struct hlist_nulls_node node;	/* Hash table node for fast lookup by Connection ID */
-	struct rcu_head rcu;		/* RCU header for deferred destruction */
-	struct sock *sk;		/* Pointer to sk associated with this Connection ID */
+	struct hlist_nulls_node node; /* Hash table node for fast lookup */
+	struct rcu_head rcu; /* RCU header for deferred destruction */
+	struct sock *sk;      /* Socket associated with this Connection ID */
 };
 
 struct quic_dest_conn_id {
 	struct quic_common_conn_id common;
-	u8 token[QUIC_CONN_ID_TOKEN_LEN];	/* Stateless reset token in rfc9000#section-10.3 */
+	/* Stateless reset token in rfc9000#section-10.3 */
+	u8 token[QUIC_CONN_ID_TOKEN_LEN];
 };
 
 struct quic_conn_id_set {
@@ -39,18 +40,21 @@ struct quic_conn_id_set {
 	struct quic_common_conn_id *active;
 	/* Connection ID to use for a new path (e.g., after migration) */
 	struct quic_common_conn_id *alt;
-	struct list_head head;	/* Head of the linked list of available connection IDs */
-	u8 entry_size;		/* Size of each connection ID entry (in bytes) in the list */
-	u8 max_count;		/* active_connection_id_limit in rfc9000#section-18.2 */
-	u8 count;		/* Current number of connection IDs in the list */
+	struct list_head head; /* List head of available connection IDs */
+	u8 entry_size; /* Size of each connection ID entry in the list */
+	u8 max_count;  /* active_connection_id_limit in rfc9000#section-18.2 */
+	u8 count;      /* Current number of connection IDs in the list */
 };
 
 static inline u32 quic_conn_id_first_number(struct quic_conn_id_set *id_set)
 {
 	struct quic_common_conn_id *common;
 
-	/* The id_set is guaranteed to be non-empty when called (sk is not in CLOSE state). */
-	common = list_first_entry(&id_set->head, struct quic_common_conn_id, list);
+	/* The id_set is guaranteed to be non-empty when called (sk is not in
+	 * CLOSE state).
+	 */
+	common = list_first_entry(&id_set->head, struct quic_common_conn_id,
+				  list);
 	return common->number;
 }
 
@@ -65,8 +69,11 @@ static inline void quic_conn_id_generate(struct quic_conn_id *conn_id)
 	conn_id->len = QUIC_CONN_ID_DEF_LEN;
 }
 
-/* Select an alternate destination Connection ID for a new path (e.g., after migration). */
-static inline bool quic_conn_id_select_alt(struct quic_conn_id_set *id_set, bool active)
+/* Select an alternate destination Connection ID for a new path (e.g., after
+ * migration).
+ */
+static inline bool quic_conn_id_select_alt(struct quic_conn_id_set *id_set,
+					   bool active)
 {
 	if (id_set->alt)
 		return true;
@@ -90,18 +97,20 @@ static inline bool quic_conn_id_select_alt(struct quic_conn_id_set *id_set, bool
 		return true;
 	}
 	/* No alternate conn_id could be selected.  Caller should send a
-	 * QUIC_FRAME_RETIRE_CONNECTION_ID frame to request new connection IDs from the peer.
+	 * QUIC_FRAME_RETIRE_CONNECTION_ID frame to request new connection IDs
+	 * from the peer.
 	 */
 	return false;
 }
 
-static inline void quic_conn_id_set_alt(struct quic_conn_id_set *id_set, struct quic_conn_id *alt)
+static inline void quic_conn_id_set_alt(struct quic_conn_id_set *id_set,
+					struct quic_conn_id *alt)
 {
 	id_set->alt = (struct quic_common_conn_id *)alt;
 }
 
-/* Swap the active and alternate destination Connection IDs after path migration completes,
- * since the path has already been switched accordingly.
+/* Swap the active and alternate destination Connection IDs after path
+ * migration completes, since the path has already been switched accordingly.
  */
 static inline void quic_conn_id_swap_active(struct quic_conn_id_set *id_set)
 {
@@ -111,13 +120,17 @@ static inline void quic_conn_id_swap_active(struct quic_conn_id_set *id_set)
 	id_set->alt = active;
 }
 
-/* Choose which destination Connection ID to use for a new path migration if alt is true. */
-static inline struct quic_conn_id *quic_conn_id_choose(struct quic_conn_id_set *id_set, u8 alt)
+/* Choose which destination Connection ID to use for a new path migration if
+ * alt is true.
+ */
+static inline struct quic_conn_id *
+quic_conn_id_choose(struct quic_conn_id_set *id_set, u8 alt)
 {
 	return (alt && id_set->alt) ? &id_set->alt->id : &id_set->active->id;
 }
 
-static inline struct quic_conn_id *quic_conn_id_active(struct quic_conn_id_set *id_set)
+static inline struct quic_conn_id *
+quic_conn_id_active(struct quic_conn_id_set *id_set)
 {
 	return &id_set->active->id;
 }
@@ -138,26 +151,32 @@ static inline struct sock *quic_conn_id_sk(struct quic_conn_id *conn_id)
 	return ((struct quic_source_conn_id *)conn_id)->sk;
 }
 
-static inline void quic_conn_id_set_token(struct quic_conn_id *conn_id, u8 *token)
+static inline void quic_conn_id_set_token(struct quic_conn_id *conn_id,
+					  u8 *token)
 {
-	memcpy(((struct quic_dest_conn_id *)conn_id)->token, token, QUIC_CONN_ID_TOKEN_LEN);
+	memcpy(((struct quic_dest_conn_id *)conn_id)->token, token,
+	       QUIC_CONN_ID_TOKEN_LEN);
 }
 
-static inline int quic_conn_id_cmp(struct quic_conn_id *a, struct quic_conn_id *b)
+static inline int quic_conn_id_cmp(struct quic_conn_id *a,
+				   struct quic_conn_id *b)
 {
 	return a->len != b->len || memcmp(a->data, b->data, a->len);
 }
 
-int quic_conn_id_add(struct quic_conn_id_set *id_set, struct quic_conn_id *conn_id,
-		     u32 number, void *data);
+int quic_conn_id_add(struct quic_conn_id_set *id_set,
+		     struct quic_conn_id *conn_id, u32 number, void *data);
 bool quic_conn_id_token_exists(struct quic_conn_id_set *id_set, u8 *token);
 void quic_conn_id_remove(struct quic_conn_id_set *id_set, u32 number);
 
-struct quic_conn_id *quic_conn_id_find(struct quic_conn_id_set *id_set, u32 number);
+struct quic_conn_id *quic_conn_id_find(struct quic_conn_id_set *id_set,
+				       u32 number);
 struct quic_conn_id *quic_conn_id_lookup(struct net *net, u8 *scid, u32 len);
 void quic_conn_id_update_active(struct quic_conn_id_set *id_set, u32 number);
 
-void quic_conn_id_get_param(struct quic_conn_id_set *id_set, struct quic_transport_param *p);
-void quic_conn_id_set_param(struct quic_conn_id_set *id_set, struct quic_transport_param *p);
+void quic_conn_id_get_param(struct quic_conn_id_set *id_set,
+			    struct quic_transport_param *p);
+void quic_conn_id_set_param(struct quic_conn_id_set *id_set,
+			    struct quic_transport_param *p);
 void quic_conn_id_set_init(struct quic_conn_id_set *id_set, bool source);
 void quic_conn_id_set_free(struct quic_conn_id_set *id_set);

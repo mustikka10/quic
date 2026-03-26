@@ -16,7 +16,9 @@
 #include "common.h"
 #include "connid.h"
 
-/* Lookup a source connection ID (scid) in the global source connection ID hash table. */
+/* Lookup a source connection ID (scid) in the global source connection ID hash
+ * table.
+ */
 struct quic_conn_id *quic_conn_id_lookup(struct net *net, u8 *scid, u32 len)
 {
 	struct quic_shash_head *head = quic_source_conn_id_head(net, scid, len);
@@ -25,25 +27,29 @@ struct quic_conn_id *quic_conn_id_lookup(struct net *net, u8 *scid, u32 len)
 	struct hlist_nulls_node *node;
 
 	hlist_nulls_for_each_entry_rcu(s_conn_id, node, &head->head, node) {
-		if (net == sock_net(s_conn_id->sk) && s_conn_id->common.id.len == len &&
-		    !memcmp(scid, &s_conn_id->common.id.data, s_conn_id->common.id.len)) {
-			if (likely(refcount_inc_not_zero(&s_conn_id->sk->sk_refcnt)))
-				conn_id = &s_conn_id->common.id;
-			break;
-		}
+		if (net != sock_net(s_conn_id->sk))
+			continue;
+		if (s_conn_id->common.id.len != len ||
+		    memcmp(scid, &s_conn_id->common.id.data, len))
+			continue;
+		if (likely(refcount_inc_not_zero(&s_conn_id->sk->sk_refcnt)))
+			conn_id = &s_conn_id->common.id;
+		break;
 	}
 	return conn_id;
 }
 
-/* Check if a given stateless reset token exists in any connection ID in the connection ID set. */
+/* Check if a given stateless reset token exists in any connection ID in the
+ * connection ID set.
+ */
 bool quic_conn_id_token_exists(struct quic_conn_id_set *id_set, u8 *token)
 {
 	struct quic_common_conn_id *common;
 	struct quic_dest_conn_id *dcid;
 
 	dcid = (struct quic_dest_conn_id *)id_set->active;
-	if (!memcmp(dcid->token, token, QUIC_CONN_ID_TOKEN_LEN)) /* Fast path. */
-		return true;
+	if (!memcmp(dcid->token, token, QUIC_CONN_ID_TOKEN_LEN))
+		return true; /* Fast path. */
 
 	list_for_each_entry(common, &id_set->head, list) {
 		dcid = (struct quic_dest_conn_id *)common;
@@ -70,13 +76,16 @@ static void quic_source_conn_id_free(struct quic_source_conn_id *s_conn_id)
 	struct quic_shash_head *head;
 
 	if (!hlist_nulls_unhashed(&s_conn_id->node)) {
-		head = quic_source_conn_id_head(sock_net(s_conn_id->sk), data, len);
+		head = quic_source_conn_id_head(sock_net(s_conn_id->sk), data,
+						len);
 		spin_lock_bh(&head->lock);
 		hlist_nulls_del_init_rcu(&s_conn_id->node);
 		spin_unlock_bh(&head->lock);
 	}
 
-	/* Freeing is deferred via RCU to avoid use-after-free during concurrent lookups. */
+	/* Freeing is deferred via RCU to avoid use-after-free during
+	 * concurrent lookups.
+	 */
 	call_rcu(&s_conn_id->rcu, quic_source_conn_id_free_rcu);
 }
 
@@ -90,7 +99,9 @@ static void quic_conn_id_del(struct quic_common_conn_id *common)
 	quic_source_conn_id_free((struct quic_source_conn_id *)common);
 }
 
-/* Add a connection ID with sequence number and associated private data to the connection ID set. */
+/* Add a connection ID with sequence number and associated private data to the
+ * connection ID set.
+ */
 int quic_conn_id_add(struct quic_conn_id_set *id_set,
 		     struct quic_conn_id *conn_id, u32 number, void *data)
 {
@@ -119,20 +130,23 @@ int quic_conn_id_add(struct quic_conn_id_set *id_set,
 	common->id = *conn_id;
 	common->number = number;
 	if (id_set->entry_size == sizeof(struct quic_dest_conn_id)) {
-		/* For destination connection IDs, copy the stateless reset token if available. */
+		/* For destination connection IDs, copy the stateless reset
+		 * token if available.
+		 */
 		if (data) {
 			d_conn_id = (struct quic_dest_conn_id *)common;
 			memcpy(d_conn_id->token, data, QUIC_CONN_ID_TOKEN_LEN);
 		}
 	} else {
-		/* For source connection IDs, mark as hashed and insert into the global source
-		 * connection ID hashtable.
+		/* For source connection IDs, mark as hashed and insert into
+		 * the global source connection ID hashtable.
 		 */
 		common->hashed = 1;
 		s_conn_id = (struct quic_source_conn_id *)common;
 		s_conn_id->sk = data;
 
-		head = quic_source_conn_id_head(sock_net(s_conn_id->sk), common->id.data,
+		head = quic_source_conn_id_head(sock_net(s_conn_id->sk),
+						common->id.data,
 						common->id.len);
 		spin_lock_bh(&head->lock);
 		hlist_nulls_add_head_rcu(&s_conn_id->node, &head->head);
@@ -179,7 +193,8 @@ void quic_conn_id_remove(struct quic_conn_id_set *id_set, u32 number)
 	}
 }
 
-struct quic_conn_id *quic_conn_id_find(struct quic_conn_id_set *id_set, u32 number)
+struct quic_conn_id *quic_conn_id_find(struct quic_conn_id_set *id_set,
+				       u32 number)
 {
 	struct quic_common_conn_id *common;
 
@@ -221,12 +236,14 @@ void quic_conn_id_set_free(struct quic_conn_id_set *id_set)
 	id_set->active = NULL;
 }
 
-void quic_conn_id_get_param(struct quic_conn_id_set *id_set, struct quic_transport_param *p)
+void quic_conn_id_get_param(struct quic_conn_id_set *id_set,
+			    struct quic_transport_param *p)
 {
 	p->active_connection_id_limit = id_set->max_count;
 }
 
-void quic_conn_id_set_param(struct quic_conn_id_set *id_set, struct quic_transport_param *p)
+void quic_conn_id_set_param(struct quic_conn_id_set *id_set,
+			    struct quic_transport_param *p)
 {
 	id_set->max_count = p->active_connection_id_limit;
 }
