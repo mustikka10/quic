@@ -20,21 +20,21 @@
 /* CUBIC APIs */
 struct quic_cubic {
 	/* Variables of Interest in rfc9438#section-4.1.2 */
-	u32 pending_w_add;		/* Accumulate fractional increments to W_est */
-	u32 origin_point;		/* W_max */
-	u32 epoch_start;		/* t_epoch */
-	u32 pending_add;		/* Accumulates fractional additions to W_cubic */
-	u32 w_last_max;			/* last W_max */
-	u32 w_tcp;			/* W_est */
-	u64 k;				/* K */
+	u32 pending_w_add; /* Accumulate fractional increments to W_est */
+	u32 origin_point;  /* W_max */
+	u32 epoch_start;   /* t_epoch */
+	u32 pending_add;   /* Accumulates fractional additions to W_cubic */
+	u32 w_last_max;    /* last W_max */
+	u32 w_tcp;         /* W_est */
+	u64 k;             /* K */
 
 	/* HyStart++ variables in rfc9406#section-4.2 */
-	u32 current_round_min_rtt;	/* currentRoundMinRTT */
-	u32 css_baseline_min_rtt;	/* cssBaselineMinRtt */
-	u32 last_round_min_rtt;		/* lastRoundMinRTT */
-	u16 rtt_sample_count;		/* rttSampleCount */
-	u16 css_rounds;			/* Counter for consecutive rounds showing RTT increase */
-	s64 window_end;			/* End of current CSS round (packet number) */
+	u32 current_round_min_rtt; /* currentRoundMinRTT */
+	u32 css_baseline_min_rtt;  /* cssBaselineMinRtt */
+	u32 last_round_min_rtt;    /* lastRoundMinRTT */
+	u16 rtt_sample_count;      /* rttSampleCount */
+	u16 css_rounds; /* Consecutive rounds showing RTT increase counter */
+	s64 window_end; /* End of current CSS round (packet number) */
 };
 
 /* HyStart++ constants in rfc9406#section-4.3 */
@@ -78,7 +78,7 @@ static void cubic_slow_start(struct quic_cong *cong, u32 bytes, s64 number)
 	cong->window = min_t(u32, cong->window + bytes, cong->max_window);
 
 	if (cubic->css_baseline_min_rtt != U32_MAX) {
-		/* If CSS_ROUNDS rounds are complete, enter congestion avoidance. */
+		/* If CSS_ROUNDS rounds complete, enter congestion avoidance. */
 		if (++cubic->css_rounds > QUIC_HS_CSS_ROUNDS) {
 			cubic->css_baseline_min_rtt = U32_MAX;
 			cubic->w_last_max = cong->window;
@@ -107,12 +107,15 @@ static void cubic_slow_start(struct quic_cong *cong, u32 bytes, s64 number)
 		else if (eta > QUIC_HS_MAX_ETA)
 			eta = QUIC_HS_MAX_ETA;
 
-		pr_debug("%s: current_round_min_rtt: %u, last_round_min_rtt: %u, eta: %u\n",
-			 __func__, cubic->current_round_min_rtt, cubic->last_round_min_rtt, eta);
+		pr_debug("%s: current_min_rtt: %u, last_min_rtt: %u, eta: %u\n",
+			 __func__, cubic->current_round_min_rtt,
+			 cubic->last_round_min_rtt, eta);
 
 		/* Delay increase triggers slow start exit and enter CSS. */
-		if (cubic->current_round_min_rtt >= cubic->last_round_min_rtt + eta)
-			cubic->css_baseline_min_rtt = cubic->current_round_min_rtt;
+		if (cubic->current_round_min_rtt >=
+		    cubic->last_round_min_rtt + eta)
+			cubic->css_baseline_min_rtt =
+				cubic->current_round_min_rtt;
 	}
 }
 
@@ -135,7 +138,8 @@ static void cubic_cong_avoid(struct quic_cong *cong, u32 bytes)
 			 *       ╲│       C
 			 */
 			cubic->k = cubic->w_last_max - cong->window;
-			cubic->k = cubic_root(div64_ul(cubic->k * 10, (u64)cong->mss * 4));
+			cubic->k = div64_ul(cubic->k * 10, (u64)cong->mss * 4);
+			cubic->k = cubic_root(cubic->k);
 			cubic->origin_point = cubic->w_last_max;
 		} else {
 			cubic->k = 0;
@@ -162,14 +166,14 @@ static void cubic_cong_avoid(struct quic_cong *cong, u32 bytes)
 	 * W     (t) = C * (t - K)  + W
 	 *  cubic                      max
 	 */
-	delta = cong->mss * ((((time_delta * time_delta) >> 10) * time_delta) >> 10);
-	delta = div64_ul(delta * 4, 10) >> 10;
+	delta = (((time_delta * time_delta) >> 10) * time_delta) >> 10;
+	delta = div64_ul(delta * cong->mss * 4, 10) >> 10;
 	if (tx > kx)
 		target = cubic->origin_point + delta;
 	else
 		target = cubic->origin_point - delta;
 
-	pr_debug("%s: tgt: %llu, delta: %llu, t: %llu, srtt: %u, tx: %llu, kx: %llu\n",
+	pr_debug("%s: tgt: %llu, d: %llu, t: %llu, s: %u, tx: %llu, kx: %llu\n",
 		 __func__, target, delta, t, cong->smoothed_rtt, tx, kx);
 	/*
 	 *          ⎧
@@ -191,7 +195,8 @@ static void cubic_cong_avoid(struct quic_cong *cong, u32 bytes)
 	 *      cwnd
 	 */
 	if (target > cong->window) {
-		target_add = cubic->pending_add + cong->mss * (target - cong->window);
+		target_add = cong->mss * (target - cong->window);
+		target_add += cubic->pending_add;
 		cubic->pending_add = do_div(target_add, cong->window);
 	} else {
 		target_add = cubic->pending_add + cong->mss;
@@ -210,8 +215,10 @@ static void cubic_cong_avoid(struct quic_cong *cong, u32 bytes)
 	cubic->pending_w_add = do_div(m, cong->window);
 	cubic->w_tcp += m;
 
-	if (cubic->w_tcp > cong->window)
-		tcp_add = div64_ul((u64)cong->mss * (cubic->w_tcp - cong->window), cong->window);
+	if (cubic->w_tcp > cong->window) {
+		tcp_add = (u64)cong->mss * (cubic->w_tcp - cong->window);
+		tcp_add = div64_ul(tcp_add, cong->window);
+	}
 
 	pr_debug("%s: w_tcp: %u, window: %u, tcp_add: %llu\n",
 		 __func__, cubic->w_tcp, cong->window, tcp_add);
@@ -228,14 +235,14 @@ static void cubic_recovery(struct quic_cong *cong)
 	cubic->epoch_start = U32_MAX;
 
 	/* rfc9438#section-3.4:
-	 *   CUBIC sets the multiplicative window decrease factor (β__cubic_) to 0.7,
-	 *   whereas Reno uses 0.5.
+	 *   CUBIC sets the multiplicative window decrease factor (β__cubic_)
+	 *   to 0.7, whereas Reno uses 0.5.
 	 *
 	 * rfc9438#section-4.6:
 	 *   ssthresh =  flight_size * β      new  ssthresh
 	 *
-	 *   Some implementations of CUBIC currently use _cwnd_ instead of _flight_size_ when
-	 *   calculating a new _ssthresh_.
+	 *   Some implementations of CUBIC currently use _cwnd_ instead of
+	 *   _flight_size_ when calculating a new _ssthresh_.
 	 *
 	 * rfc9438#section-4.7:
 	 *
@@ -257,7 +264,8 @@ static void cubic_recovery(struct quic_cong *cong)
 	cong->window = cong->ssthresh;
 }
 
-static bool quic_cong_check_persistent_congestion(struct quic_cong *cong, u64 time)
+static bool quic_cong_check_persistent_congestion(struct quic_cong *cong,
+						  u64 time)
 {
 	u32 ssthresh;
 
@@ -265,12 +273,14 @@ static bool quic_cong_check_persistent_congestion(struct quic_cong *cong, u64 ti
 	 *   (smoothed_rtt + max(4*rttvar, kGranularity) + max_ack_delay) *
 	 *      kPersistentCongestionThreshold
 	 */
-	ssthresh = cong->smoothed_rtt + max(4 * cong->rttvar, QUIC_KGRANULARITY);
-	ssthresh = (ssthresh + cong->max_ack_delay) * QUIC_KPERSISTENT_CONGESTION_THRESHOLD;
+	ssthresh = cong->smoothed_rtt +
+		   max(4 * cong->rttvar, QUIC_KGRANULARITY);
+	ssthresh = (ssthresh + cong->max_ack_delay) *
+		   QUIC_KPERSISTENT_CONGESTION_THRESHOLD;
 	if (cong->time - time <= ssthresh)
 		return false;
 
-	pr_debug("%s: persistent congestion, cwnd: %u, ssthresh: %u\n",
+	pr_debug("%s: persistent congestion, cwnd: %u, ssth: %u\n",
 		 __func__, cong->window, cong->ssthresh);
 	cong->min_rtt_valid = 0;
 	cong->window = cong->min_window;
@@ -278,7 +288,8 @@ static bool quic_cong_check_persistent_congestion(struct quic_cong *cong, u64 ti
 	return true;
 }
 
-static void quic_cubic_on_packet_lost(struct quic_cong *cong, u64 time, u32 bytes, s64 number)
+static void quic_cubic_on_packet_lost(struct quic_cong *cong, u64 time,
+				      u32 bytes, s64 number)
 {
 	if (quic_cong_check_persistent_congestion(cong, time))
 		return;
@@ -295,7 +306,8 @@ static void quic_cubic_on_packet_lost(struct quic_cong *cong, u64 time, u32 byte
 			 __func__, cong->window, cong->ssthresh);
 		break;
 	default:
-		pr_debug("%s: wrong congestion state: %d\n", __func__, cong->state);
+		pr_debug("%s: wrong congestion state: %d\n", __func__,
+			 cong->state);
 		return;
 	}
 
@@ -303,29 +315,31 @@ static void quic_cubic_on_packet_lost(struct quic_cong *cong, u64 time, u32 byte
 	cubic_recovery(cong);
 }
 
-static void quic_cubic_on_packet_acked(struct quic_cong *cong, u64 time, u32 bytes, s64 number)
+static void quic_cubic_on_packet_acked(struct quic_cong *cong, u64 time,
+				       u32 bytes, s64 number)
 {
 	switch (cong->state) {
 	case QUIC_CONG_SLOW_START:
 		cubic_slow_start(cong, bytes, number);
-		if (cong->window >= cong->ssthresh) {
-			cong->state = QUIC_CONG_CONGESTION_AVOIDANCE;
-			pr_debug("%s: slow_start -> cong_avoid, cwnd: %u, ssthresh: %u\n",
-				 __func__, cong->window, cong->ssthresh);
-		}
+		if (cong->window < cong->ssthresh)
+			break;
+		cong->state = QUIC_CONG_CONGESTION_AVOIDANCE;
+		pr_debug("%s: slow_start -> cong_avoid, cwnd: %u, ssth: %u\n",
+			 __func__, cong->window, cong->ssthresh);
 		break;
 	case QUIC_CONG_RECOVERY_PERIOD:
-		if (cong->recovery_time < time) {
-			cong->state = QUIC_CONG_CONGESTION_AVOIDANCE;
-			pr_debug("%s: recovery -> cong_avoid, cwnd: %u, ssthresh: %u\n",
-				 __func__, cong->window, cong->ssthresh);
-		}
+		if (cong->recovery_time >= time)
+			break;
+		cong->state = QUIC_CONG_CONGESTION_AVOIDANCE;
+		pr_debug("%s: recovery -> cong_avoid, cwnd: %u, ssth: %u\n",
+			 __func__, cong->window, cong->ssthresh);
 		break;
 	case QUIC_CONG_CONGESTION_AVOIDANCE:
 		cubic_cong_avoid(cong, bytes);
 		break;
 	default:
-		pr_debug("%s: wrong congestion state: %d\n", __func__, cong->state);
+		pr_debug("%s: wrong congestion state: %d\n", __func__,
+			 cong->state);
 		return;
 	}
 }
@@ -334,17 +348,18 @@ static void quic_cubic_on_process_ecn(struct quic_cong *cong)
 {
 	switch (cong->state) {
 	case QUIC_CONG_SLOW_START:
-		pr_debug("%s: slow_start -> recovery, cwnd: %u, ssthresh: %u\n",
+		pr_debug("%s: slow_start -> recovery, cwnd: %u, ssth: %u\n",
 			 __func__, cong->window, cong->ssthresh);
 		break;
 	case QUIC_CONG_RECOVERY_PERIOD:
 		return;
 	case QUIC_CONG_CONGESTION_AVOIDANCE:
-		pr_debug("%s: cong_avoid -> recovery, cwnd: %u, ssthresh: %u\n",
+		pr_debug("%s: cong_avoid -> recovery, cwnd: %u, ssth: %u\n",
 			 __func__, cong->window, cong->ssthresh);
 		break;
 	default:
-		pr_debug("%s: wrong congestion state: %d\n", __func__, cong->state);
+		pr_debug("%s: wrong congestion state: %d\n", __func__,
+			 cong->state);
 		return;
 	}
 
@@ -370,7 +385,8 @@ static void quic_cubic_on_init(struct quic_cong *cong)
 	cubic->css_rounds = 0;
 }
 
-static void quic_cubic_on_packet_sent(struct quic_cong *cong, u64 time, u32 bytes, s64 number)
+static void quic_cubic_on_packet_sent(struct quic_cong *cong, u64 time,
+				      u32 bytes, s64 number)
 {
 	struct quic_cubic *cubic = quic_cong_priv(cong);
 
@@ -387,7 +403,8 @@ static void quic_cubic_on_packet_sent(struct quic_cong *cong, u64 time, u32 byte
 	cubic->current_round_min_rtt = U32_MAX;
 	cubic->rtt_sample_count = 0;
 
-	pr_debug("%s: last_round_min_rtt: %u\n", __func__, cubic->last_round_min_rtt);
+	pr_debug("%s: last_round_min_rtt: %u\n", __func__,
+		 cubic->last_round_min_rtt);
 }
 
 static void quic_cubic_on_rtt_update(struct quic_cong *cong)
@@ -406,7 +423,8 @@ static void quic_cubic_on_rtt_update(struct quic_cong *cong)
 	 */
 	if (cubic->current_round_min_rtt > cong->latest_rtt) {
 		cubic->current_round_min_rtt = cong->latest_rtt;
-		if (cubic->current_round_min_rtt < cubic->css_baseline_min_rtt) {
+		if (cubic->current_round_min_rtt <
+		    cubic->css_baseline_min_rtt) {
 			cubic->css_baseline_min_rtt = U32_MAX;
 			cubic->css_rounds = 0;
 		}
@@ -419,17 +437,18 @@ static void quic_reno_handle_packet_lost(struct quic_cong *cong)
 {
 	switch (cong->state) {
 	case QUIC_CONG_SLOW_START:
-		pr_debug("%s: slow_start -> recovery, cwnd: %u, ssthresh: %u\n",
+		pr_debug("%s: slow_start -> recovery, cwnd: %u, ssth: %u\n",
 			 __func__, cong->window, cong->ssthresh);
 		break;
 	case QUIC_CONG_RECOVERY_PERIOD:
 		return;
 	case QUIC_CONG_CONGESTION_AVOIDANCE:
-		pr_debug("%s: cong_avoid -> recovery, cwnd: %u, ssthresh: %u\n",
+		pr_debug("%s: cong_avoid -> recovery, cwnd: %u, ssth: %u\n",
 			 __func__, cong->window, cong->ssthresh);
 		break;
 	default:
-		pr_debug("%s: wrong congestion state: %d\n", __func__, cong->state);
+		pr_debug("%s: wrong congestion state: %d\n", __func__,
+			 cong->state);
 		return;
 	}
 
@@ -439,7 +458,8 @@ static void quic_reno_handle_packet_lost(struct quic_cong *cong)
 	cong->window = cong->ssthresh;
 }
 
-static void quic_reno_on_packet_lost(struct quic_cong *cong, u64 time, u32 bytes, s64 number)
+static void quic_reno_on_packet_lost(struct quic_cong *cong, u64 time,
+				     u32 bytes, s64 number)
 {
 	if (quic_cong_check_persistent_congestion(cong, time))
 		return;
@@ -447,32 +467,35 @@ static void quic_reno_on_packet_lost(struct quic_cong *cong, u64 time, u32 bytes
 	quic_reno_handle_packet_lost(cong);
 }
 
-static void quic_reno_on_packet_acked(struct quic_cong *cong, u64 time, u32 bytes, s64 number)
+static void quic_reno_on_packet_acked(struct quic_cong *cong, u64 time,
+				      u32 bytes, s64 number)
 {
 	switch (cong->state) {
 	case QUIC_CONG_SLOW_START:
-		cong->window = min_t(u32, cong->window + bytes, cong->max_window);
-		if (cong->window >= cong->ssthresh) {
-			cong->state = QUIC_CONG_CONGESTION_AVOIDANCE;
-			pr_debug("%s: slow_start -> cong_avoid, cwnd: %u, ssthresh: %u\n",
-				 __func__, cong->window, cong->ssthresh);
-		}
+		cong->window = min_t(u32, cong->window + bytes,
+				     cong->max_window);
+		if (cong->window < cong->ssthresh)
+			break;
+		cong->state = QUIC_CONG_CONGESTION_AVOIDANCE;
+		pr_debug("%s: slow_start -> cong_avoid, cwnd: %u, ssth: %u\n",
+			 __func__, cong->window, cong->ssthresh);
 		break;
 	case QUIC_CONG_RECOVERY_PERIOD:
-		if (cong->recovery_time < time) {
-			cong->state = QUIC_CONG_CONGESTION_AVOIDANCE;
-			pr_debug("%s: recovery -> cong_avoid, cwnd: %u, ssthresh: %u\n",
-				 __func__, cong->window, cong->ssthresh);
-		}
+		if (cong->recovery_time >= time)
+			break;
+		cong->state = QUIC_CONG_CONGESTION_AVOIDANCE;
+		pr_debug("%s: recovery -> cong_avoid, cwnd: %u, ssth: %u\n",
+			 __func__, cong->window, cong->ssthresh);
 		break;
 	case QUIC_CONG_CONGESTION_AVOIDANCE:
-		/* cong->window is never zero; it is initialized by quic_packet_route()
-		 * during connect/accept.
+		/* cong->window is never zero; it is initialized by
+		 * quic_packet_route() during connect/accept.
 		 */
 		cong->window += cong->mss * bytes / cong->window;
 		break;
 	default:
-		pr_debug("%s: wrong congestion state: %d\n", __func__, cong->state);
+		pr_debug("%s: wrong congestion state: %d\n", __func__,
+			 cong->state);
 		return;
 	}
 }
@@ -504,13 +527,15 @@ static struct quic_cong_ops quic_congs[] = {
 };
 
 /* COMMON APIs */
-void quic_cong_on_packet_lost(struct quic_cong *cong, u64 time, u32 bytes, s64 number)
+void quic_cong_on_packet_lost(struct quic_cong *cong, u64 time, u32 bytes,
+			      s64 number)
 {
 	cong->ops->on_packet_lost(cong, time, bytes, number);
 }
 EXPORT_SYMBOL_GPL(quic_cong_on_packet_lost);
 
-void quic_cong_on_packet_acked(struct quic_cong *cong, u64 time, u32 bytes, s64 number)
+void quic_cong_on_packet_acked(struct quic_cong *cong, u64 time, u32 bytes,
+			       s64 number)
 {
 	cong->ops->on_packet_acked(cong, time, bytes, number);
 }
@@ -536,7 +561,8 @@ static void quic_cong_pto_update(struct quic_cong *cong)
 	/* rfc9002#section-6.1.2:
 	 *   max(kTimeThreshold * max(smoothed_rtt, latest_rtt), kGranularity)
 	 */
-	loss_delay = QUIC_KTIME_THRESHOLD(max(cong->smoothed_rtt, cong->latest_rtt));
+	loss_delay = QUIC_KTIME_THRESHOLD(max(cong->smoothed_rtt,
+					      cong->latest_rtt));
 	cong->loss_delay = max(loss_delay, QUIC_KGRANULARITY);
 
 	pr_debug("%s: update pto: %u\n", __func__, pto);
@@ -544,7 +570,8 @@ static void quic_cong_pto_update(struct quic_cong *cong)
 
 /* Update pacing timestamp after sending 'bytes' bytes.
  *
- * This function tracks when the next packet is allowed to be sent based on pacing rate.
+ * This function tracks when the next packet is allowed to be sent based on
+ * pacing rate.
  */
 static void quic_cong_update_pacing_time(struct quic_cong *cong, u32 bytes)
 {
@@ -563,8 +590,11 @@ static void quic_cong_update_pacing_time(struct quic_cong *cong, u32 bytes)
 	cong->pacing_time += len_ns;
 }
 
-/* Compute and update the pacing rate based on congestion window and smoothed RTT. */
-static void quic_cong_pace_update(struct quic_cong *cong, u32 bytes, u64 max_rate)
+/* Compute and update the pacing rate based on congestion window and smoothed
+ * RTT.
+ */
+static void quic_cong_pace_update(struct quic_cong *cong, u32 bytes,
+				  u64 max_rate)
 {
 	u64 rate;
 
@@ -572,14 +602,16 @@ static void quic_cong_pace_update(struct quic_cong *cong, u32 bytes, u64 max_rat
 		return;
 
 	/* rate = N * congestion_window / smoothed_rtt */
-	rate = div64_ul((u64)cong->window * USEC_PER_SEC * 2, cong->smoothed_rtt);
+	rate = div64_ul((u64)cong->window * USEC_PER_SEC * 2,
+			cong->smoothed_rtt);
 
 	WRITE_ONCE(cong->pacing_rate, min_t(u64, rate, max_rate));
 	pr_debug("%s: update pacing rate: %llu, max rate: %llu, srtt: %u\n",
 		 __func__, cong->pacing_rate, max_rate, cong->smoothed_rtt);
 }
 
-void quic_cong_on_packet_sent(struct quic_cong *cong, u64 time, u32 bytes, s64 number)
+void quic_cong_on_packet_sent(struct quic_cong *cong, u64 time, u32 bytes,
+			      s64 number)
 {
 	if (!bytes)
 		return;
@@ -608,7 +640,9 @@ void quic_cong_rtt_update(struct quic_cong *cong, u64 time, u32 ack_delay)
 	if (ack_delay > cong->max_ack_delay * 2)
 		return;
 
-	/* rfc9002#section-5.1: latest_rtt = ack_time - send_time_of_largest_acked */
+	/* rfc9002#section-5.1:
+	 *   latest_rtt = ack_time - send_time_of_largest_acked
+	 */
 	cong->latest_rtt = cong->time - time;
 
 	/* rfc9002#section-5.2: Estimating min_rtt */
@@ -648,7 +682,8 @@ void quic_cong_rtt_update(struct quic_cong *cong, u64 time, u32 ack_delay)
 	rttvar_sample = abs_diff(cong->smoothed_rtt, adjusted_rtt);
 #else
 	rttvar_sample = cong->smoothed_rtt > adjusted_rtt ?
-		cong->smoothed_rtt - adjusted_rtt : adjusted_rtt - cong->smoothed_rtt;
+			cong->smoothed_rtt - adjusted_rtt :
+			adjusted_rtt - cong->smoothed_rtt;
 #endif
 	cong->rttvar = (cong->rttvar * 3 + rttvar_sample) / 4;
 	quic_cong_pto_update(cong);

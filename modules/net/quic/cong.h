@@ -81,13 +81,16 @@ struct quic_cong {
 
 /* Hooks for congestion control algorithms */
 struct quic_cong_ops {
-	void (*on_packet_acked)(struct quic_cong *cong, u64 time, u32 bytes, s64 number);
-	void (*on_packet_lost)(struct quic_cong *cong, u64 time, u32 bytes, s64 number);
+	void (*on_packet_acked)(struct quic_cong *cong, u64 time, u32 bytes,
+				s64 number);
+	void (*on_packet_lost)(struct quic_cong *cong, u64 time, u32 bytes,
+			       s64 number);
 	void (*on_process_ecn)(struct quic_cong *cong);
 	void (*on_init)(struct quic_cong *cong);
 
 	/* Optional callbacks */
-	void (*on_packet_sent)(struct quic_cong *cong, u64 time, u32 bytes, s64 number);
+	void (*on_packet_sent)(struct quic_cong *cong, u64 time, u32 bytes,
+			       s64 number);
 	void (*on_ack_recv)(struct quic_cong *cong, u32 bytes, u64 max_rate);
 	void (*on_rtt_update)(struct quic_cong *cong);
 };
@@ -110,11 +113,14 @@ static inline void *quic_cong_priv(struct quic_cong *cong)
 	return (void *)cong->priv;
 }
 
-void quic_cong_on_packet_acked(struct quic_cong *cong, u64 time, u32 bytes, s64 number);
-void quic_cong_on_packet_lost(struct quic_cong *cong, u64 time, u32 bytes, s64 number);
+void quic_cong_on_packet_acked(struct quic_cong *cong, u64 time, u32 bytes,
+			       s64 number);
+void quic_cong_on_packet_lost(struct quic_cong *cong, u64 time, u32 bytes,
+			      s64 number);
 void quic_cong_on_process_ecn(struct quic_cong *cong);
 
-void quic_cong_on_packet_sent(struct quic_cong *cong, u64 time, u32 bytes, s64 number);
+void quic_cong_on_packet_sent(struct quic_cong *cong, u64 time, u32 bytes,
+			      s64 number);
 void quic_cong_on_ack_recv(struct quic_cong *cong, u32 bytes, u64 max_rate);
 void quic_cong_rtt_update(struct quic_cong *cong, u64 time, u32 ack_delay);
 
