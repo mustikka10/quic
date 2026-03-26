@@ -36,10 +36,11 @@ int sysctl_quic_rmem[3];
 int sysctl_quic_wmem[3];
 
 #ifdef TLS_MIN_RECORD_SIZE_LIM
-static int quic_inet_connect(struct socket *sock, struct sockaddr_unsized *addr, int addr_len,
-			     int flags)
+static int quic_inet_connect(struct socket *sock, struct sockaddr_unsized *addr,
+			     int addr_len, int flags)
 #else
-static int quic_inet_connect(struct socket *sock, struct sockaddr *addr, int addr_len, int flags)
+static int quic_inet_connect(struct socket *sock, struct sockaddr *addr,
+			     int addr_len, int flags)
 #endif
 {
 	struct sock *sk = sock->sk;
@@ -68,7 +69,8 @@ static int quic_inet_listen(struct socket *sock, int backlog)
 	paths = quic_paths(sk);
 
 	if (!backlog) {
-		if (quic_is_listen(sk)) { /* Exit listen state if backlog is zero. */
+		if (quic_is_listen(sk)) {
+			/* Exit listen state if backlog is zero. */
 			err = 0;
 			goto free;
 		}
@@ -85,8 +87,9 @@ static int quic_inet_listen(struct socket *sock, int backlog)
 			goto free;
 		quic_set_sk_addr(sk, a, true);
 	}
-	/* Generate and add destination and source connection IDs for sending Initial-level
-	 * CLOSE frames to refuse connection attempts in case of verification failure.
+	/* Generate and add destination and source connection IDs for sending
+	 * Initial-level CLOSE frames to refuse connection attempts in case of
+	 * verification failure.
 	 */
 	quic_conn_id_generate(&conn_id);
 	err = quic_conn_id_add(dest, &conn_id, 0, NULL);
@@ -121,12 +124,14 @@ free:
 	goto out;
 }
 
-static int quic_inet_getname(struct socket *sock, struct sockaddr *uaddr, int peer)
+static int quic_inet_getname(struct socket *sock, struct sockaddr *uaddr,
+			     int peer)
 {
 	return quic_get_sk_addr(sock, uaddr, peer);
 }
 
-static __poll_t quic_inet_poll(struct file *file, struct socket *sock, poll_table *wait)
+static __poll_t quic_inet_poll(struct file *file, struct socket *sock,
+			       poll_table *wait)
 {
 	struct sock *sk = sock->sk;
 	struct list_head *head;
@@ -134,23 +139,27 @@ static __poll_t quic_inet_poll(struct file *file, struct socket *sock, poll_tabl
 
 	sock_poll_wait(file, sock, wait);
 
-	sock_rps_record_flow(sk); /* Record the flow's CPU association for RFS. */
+	sock_rps_record_flow(sk); /* Record flow's CPU association for RFS. */
 
-	/* A listening socket becomes readable when the accept queue is not empty. */
+	/* A listening socket becomes readable when the accept queue is not
+	 * empty.
+	 */
 	if (quic_is_listen(sk))
 		return !list_empty(quic_reqs(sk)) ? (EPOLLIN | EPOLLRDNORM) : 0;
 
 	mask = 0;
-	if (sk->sk_err || !skb_queue_empty_lockless(&sk->sk_error_queue)) /* Error check. */
-		mask |= EPOLLERR | (sock_flag(sk, SOCK_SELECT_ERR_QUEUE) ? EPOLLPRI : 0);
+	/* Error check. */
+	if (sk->sk_err || !skb_queue_empty_lockless(&sk->sk_error_queue))
+		mask |= EPOLLERR |
+			(sock_flag(sk, SOCK_SELECT_ERR_QUEUE) ? EPOLLPRI : 0);
 
 	head = &quic_inq(sk)->recv_list;
 	if (!list_empty(head)) /* Readable check. */
 		mask |= EPOLLIN | EPOLLRDNORM;
 
 	if (quic_is_closed(sk)) {
-		/* A broken connection should report almost everything in order to let
-		 * applications to detect it reliably.
+		/* A broken connection should report almost everything in order
+		 * to let applications to detect it reliably.
 		 */
 		mask |= EPOLLHUP;
 		mask |= EPOLLERR;
@@ -159,12 +168,13 @@ static __poll_t quic_inet_poll(struct file *file, struct socket *sock, poll_tabl
 		return mask;
 	}
 
-	if (sk_stream_wspace(sk) > 0 && quic_outq_wspace(sk, NULL) > 0) { /* Writable check. */
+	/* Writable check. */
+	if (sk_stream_wspace(sk) > 0 && quic_outq_wspace(sk, NULL) > 0) {
 		mask |= EPOLLOUT | EPOLLWRNORM;
 	} else {
 		sk_set_bit(SOCKWQ_ASYNC_NOSPACE, sk);
-		/* Do writeable check again after the bit is set to avoid a lost I/O signal,
-		 * similar to sctp_poll().
+		/* Do writeable check again after the bit is set to avoid a
+		 * lost I/O signal, similar to sctp_poll().
 		 */
 		if (sk_stream_wspace(sk) > 0 && quic_outq_wspace(sk, NULL) > 0)
 			mask |= EPOLLOUT | EPOLLWRNORM;
@@ -254,8 +264,9 @@ static void *quic_conns_seq_start(struct seq_file *seq, loff_t *pos)
 		*pos = 0;
 
 	if (*pos == 0)
-		seq_printf(seq, "SOCK\tSTATE\tLOCAL_ADDRESS\tREMOTE_ADDRESS\tUDP_ADDRESS\t"
-				"WINDOW\tMSS\tIN_FLIGHT\tTX_QUEUE\tRX_QUEUE\tSNDBUF\tRCVBUF\t"
+		seq_printf(seq, "SOCK\tSTATE\tLOCAL_ADDRESS\tREMOTE_ADDRESS\t"
+				"UDP_ADDRESS\tWINDOW\tMSS\tIN_FLIGHT\t"
+				"TX_QUEUE\tRX_QUEUE\tSNDBUF\tRCVBUF\t"
 				"UID\tINODE\n");
 
 	return (void *)pos;
@@ -376,10 +387,12 @@ static int quic_snmp_seq_show(struct seq_file *seq, void *v)
 
 	memset(buff, 0, sizeof(buff));
 
-	snmp_get_cpu_field_batch_cnt(buff, quic_snmp_list, cnt, quic_net(net)->stat);
+	snmp_get_cpu_field_batch_cnt(buff, quic_snmp_list, cnt,
+				     quic_net(net)->stat);
 	for (idx = 0; idx < cnt; idx++)
 #endif
-		seq_printf(seq, "%-32s\t%lu\n", quic_snmp_list[idx].name, buff[idx]);
+		seq_printf(seq, "%-32s\t%lu\n", quic_snmp_list[idx].name,
+			   buff[idx]);
 
 	return 0;
 }
@@ -408,7 +421,8 @@ static int quic_net_proc_init(struct net *net)
 				    quic_snmp_seq_show, NULL))
 		goto free;
 	if (!proc_create_net("conns", 0444, quic_net(net)->proc_net,
-			     &quic_conns_seq_ops, sizeof(struct seq_net_private)))
+			     &quic_conns_seq_ops,
+			     sizeof(struct seq_net_private)))
 		goto free;
 	if (!proc_create_net("eps", 0444, quic_net(net)->proc_net,
 			     &quic_eps_seq_ops, sizeof(struct seq_net_private)))
@@ -556,7 +570,8 @@ static int __net_init quic_net_init(struct net *net)
 	if (!qn->stat)
 		return -ENOMEM;
 
-	err = quic_crypto_set_cipher(&qn->crypto, TLS_CIPHER_AES_GCM_128, CRYPTO_ALG_ASYNC);
+	err = quic_crypto_set_cipher(&qn->crypto, TLS_CIPHER_AES_GCM_128,
+				     CRYPTO_ALG_ASYNC);
 	if (err) {
 		free_percpu(qn->stat);
 		qn->stat = NULL;
@@ -603,7 +618,8 @@ static struct ctl_table_header *quic_sysctl_header;
 
 static void quic_sysctl_register(void)
 {
-	quic_sysctl_header = register_net_sysctl(&init_net, "net/quic", quic_table);
+	quic_sysctl_header = register_net_sysctl(&init_net, "net/quic",
+						 quic_table);
 }
 
 static void quic_sysctl_unregister(void)
@@ -617,9 +633,12 @@ static __init int quic_init(void)
 	int max_share, err = -ENOMEM;
 	unsigned long limit;
 
-	BUILD_BUG_ON(sizeof(struct quic_skb_cb) > sizeof_field(struct sk_buff, cb));
+	BUILD_BUG_ON(sizeof(struct quic_skb_cb) >
+		     sizeof_field(struct sk_buff, cb));
 
-	/* Set QUIC memory limits based on available system memory, similar to sctp_init(). */
+	/* Set QUIC memory limits based on available system memory, similar to
+	 * sctp_init().
+	 */
 	limit = nr_free_buffer_pages() / 8;
 	limit = max(limit, 128UL);
 	sysctl_quic_mem[0] = (long)limit / 4 * 3;
@@ -640,7 +659,8 @@ static __init int quic_init(void)
 	quic_transport_param_init();
 	quic_crypto_init();
 
-	quic_frame_cachep = kmem_cache_create("quic_frame", sizeof(struct quic_frame),
+	quic_frame_cachep = kmem_cache_create("quic_frame",
+					      sizeof(struct quic_frame),
 					      0, SLAB_HWCACHE_ALIGN, NULL);
 	if (!quic_frame_cachep)
 		goto err;
