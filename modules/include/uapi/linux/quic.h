@@ -19,7 +19,7 @@
 #endif
 
 enum {
-	IPPROTO_QUIC = 261,		/* A UDP-Based Multiplexed and Secure Transport	*/
+	IPPROTO_QUIC = 261, /* A UDP-Based Multiplexed Secure Transport */
 #define IPPROTO_QUIC		IPPROTO_QUIC
 };
 

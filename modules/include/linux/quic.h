@@ -14,7 +14,9 @@
 #include <linux/sockptr.h>
 #include <uapi/linux/quic.h>
 
-int quic_do_setsockopt(struct sock *sk, int optname, sockptr_t optval, unsigned int optlen);
-int quic_do_getsockopt(struct sock *sk, int optname, sockptr_t optval, sockptr_t optlen);
+int quic_do_setsockopt(struct sock *sk, int optname, sockptr_t optval,
+		       unsigned int optlen);
+int quic_do_getsockopt(struct sock *sk, int optname, sockptr_t optval,
+		       sockptr_t optlen);
 
 #endif
