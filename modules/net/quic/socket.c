@@ -395,7 +395,6 @@ static int quic_init_sock(struct sock *sk)
 	struct quic_transport_param *p = &quic_default_param;
 	u8 i;
 
-	sk->sk_destruct = inet_sock_destruct;
 	sk->sk_write_space = quic_write_space;
 	sock_set_flag(sk, SOCK_USE_WRITE_QUEUE);
 
