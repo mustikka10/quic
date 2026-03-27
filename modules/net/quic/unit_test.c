@@ -39,7 +39,7 @@ static void quic_pnspace_test1(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, space->pn_map_len, QUIC_PN_MAP_INITIAL);
 
 	KUNIT_EXPECT_EQ(test, 0, quic_pnspace_mark(space, -1));
-	KUNIT_EXPECT_EQ(test, -ENOMEM,
+	KUNIT_EXPECT_EQ(test, -EINVAL,
 			quic_pnspace_mark(space, QUIC_PN_MAP_SIZE + 1));
 
 	KUNIT_EXPECT_EQ(test, 0, quic_pnspace_mark(space, 0));
@@ -155,7 +155,7 @@ static void quic_pnspace_test1(struct kunit *test)
 
 	KUNIT_EXPECT_EQ(test, 0,
 			quic_pnspace_mark(space, QUIC_PN_MAP_SIZE + 1));
-	KUNIT_EXPECT_EQ(test, -ENOMEM,
+	KUNIT_EXPECT_EQ(test, -EINVAL,
 			quic_pnspace_mark(space, space->base_pn +
 						 QUIC_PN_MAP_SIZE + 1));
 
@@ -276,7 +276,7 @@ static void quic_pnspace_test2(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, 1, quic_pnspace_check(space, 29));
 	KUNIT_EXPECT_EQ(test, 1, quic_pnspace_check(space, 19));
 	KUNIT_EXPECT_EQ(test, 0, quic_pnspace_check(space, 35));
-	KUNIT_EXPECT_EQ(test, -1,
+	KUNIT_EXPECT_EQ(test, -EINVAL,
 			quic_pnspace_check(space,
 					   space->base_pn + QUIC_PN_MAP_SIZE));
 
