@@ -45,7 +45,6 @@ static int quic_crypto_hkdf_extract(struct crypto_shash *tfm,
 static int quic_crypto_hkdf_expand(struct crypto_shash *tfm,
 				   struct quic_data *srt,
 				   struct quic_data *label,
-				   struct quic_data *hash,
 				   struct quic_data *key)
 {
 	u8 cnt = 1, info[QUIC_MAX_INFO_LEN], *p = info, *prev = NULL;
@@ -67,17 +66,12 @@ static int quic_crypto_hkdf_expand(struct crypto_shash *tfm,
 	 *      opaque context<0..255> = Context;
 	 *  } HkdfLabel;
 	 */
-	*p++ = (u8)(key->len / QUIC_MAX_INFO_LEN);
-	*p++ = (u8)(key->len % QUIC_MAX_INFO_LEN);
+	put_unaligned_be16(key->len, p);
+	p += 2;
 	*p++ = (u8)(sizeof(LABEL) - 1 + label->len);
 	p = quic_put_data(p, LABEL, sizeof(LABEL) - 1);
 	p = quic_put_data(p, label->data, label->len);
-	if (hash) {
-		*p++ = (u8)hash->len;
-		p = quic_put_data(p, hash->data, hash->len);
-	} else {
-		*p++ = 0;
-	}
+	*p++ = 0;
 	infolen = (u32)(p - info);
 
 	desc->tfm = tfm;
@@ -144,7 +138,6 @@ static int quic_crypto_keys_derive(struct crypto_shash *tfm,
 	struct quic_data hp_k_l = {HP_KEY_LABEL_V1, strlen(HP_KEY_LABEL_V1)};
 	struct quic_data k_l = {KEY_LABEL_V1, strlen(KEY_LABEL_V1)};
 	struct quic_data i_l = {IV_LABEL_V1, strlen(IV_LABEL_V1)};
-	struct quic_data z = {};
 	int err;
 
 	/* rfc9001#section-5.1:
@@ -161,17 +154,17 @@ static int quic_crypto_keys_derive(struct crypto_shash *tfm,
 		quic_data(&i_l, IV_LABEL_V2, strlen(IV_LABEL_V2));
 	}
 
-	err = quic_crypto_hkdf_expand(tfm, s, &k_l, &z, k);
+	err = quic_crypto_hkdf_expand(tfm, s, &k_l, k);
 	if (err)
 		return err;
-	err = quic_crypto_hkdf_expand(tfm, s, &i_l, &z, i);
+	err = quic_crypto_hkdf_expand(tfm, s, &i_l, i);
 	if (err)
 		return err;
 	/* Don't change hp key for key update. */
 	if (!hp_k)
 		return 0;
 
-	return quic_crypto_hkdf_expand(tfm, s, &hp_k_l, &z, hp_k);
+	return quic_crypto_hkdf_expand(tfm, s, &hp_k_l, hp_k);
 }
 
 /* Derive and install reception (RX) or transmission (TX) packet protection
@@ -799,7 +792,7 @@ int quic_crypto_key_update(struct quic_crypto *crypto)
 {
 	u8 tx_secret[QUIC_SECRET_LEN], rx_secret[QUIC_SECRET_LEN];
 	struct quic_data l = {KU_LABEL_V1, strlen(KU_LABEL_V1)};
-	struct quic_data z = {}, k, srt;
+	struct quic_data k, srt;
 	u32 secret_len;
 	int err;
 
@@ -832,7 +825,7 @@ int quic_crypto_key_update(struct quic_crypto *crypto)
 
 	quic_data(&srt, tx_secret, secret_len);
 	quic_data(&k, crypto->tx_secret, secret_len);
-	err = quic_crypto_hkdf_expand(crypto->secret_tfm, &srt, &l, &z, &k);
+	err = quic_crypto_hkdf_expand(crypto->secret_tfm, &srt, &l, &k);
 	if (err)
 		goto err;
 	err = quic_crypto_keys_derive_and_install(crypto, false);
@@ -841,7 +834,7 @@ int quic_crypto_key_update(struct quic_crypto *crypto)
 
 	quic_data(&srt, rx_secret, secret_len);
 	quic_data(&k, crypto->rx_secret, secret_len);
-	err = quic_crypto_hkdf_expand(crypto->secret_tfm, &srt, &l, &z, &k);
+	err = quic_crypto_hkdf_expand(crypto->secret_tfm, &srt, &l, &k);
 	if (err)
 		goto err;
 	err = quic_crypto_keys_derive_and_install(crypto, true);
@@ -899,7 +892,7 @@ int quic_crypto_initial_keys_install(struct quic_crypto *crypto,
 				     u32 version, bool is_serv)
 {
 	u8 secret[TLS_CIPHER_AES_GCM_128_SECRET_SIZE];
-	struct quic_data salt, s, k, l, dcid, z = {};
+	struct quic_data salt, s, k, l, dcid;
 	struct quic_crypto_secret srt = {};
 	char *tl, *rl, *sal;
 	int err;
@@ -947,7 +940,7 @@ int quic_crypto_initial_keys_install(struct quic_crypto *crypto,
 	quic_data(&k, srt.secret, TLS_CIPHER_AES_GCM_128_SECRET_SIZE);
 	srt.type = TLS_CIPHER_AES_GCM_128;
 	srt.send = 1;
-	err = quic_crypto_hkdf_expand(crypto->secret_tfm, &s, &l, &z, &k);
+	err = quic_crypto_hkdf_expand(crypto->secret_tfm, &s, &l, &k);
 	if (err)
 		goto out;
 	err = quic_crypto_set_secret(crypto, &srt, version, 0);
@@ -958,7 +951,7 @@ int quic_crypto_initial_keys_install(struct quic_crypto *crypto,
 	quic_data(&k, srt.secret, TLS_CIPHER_AES_GCM_128_SECRET_SIZE);
 	srt.type = TLS_CIPHER_AES_GCM_128;
 	srt.send = 0;
-	err = quic_crypto_hkdf_expand(crypto->secret_tfm, &s, &l, &z, &k);
+	err = quic_crypto_hkdf_expand(crypto->secret_tfm, &s, &l, &k);
 	if (err)
 		goto out;
 	err = quic_crypto_set_secret(crypto, &srt, version, 0);
@@ -1210,7 +1203,7 @@ static int quic_crypto_generate_key(struct quic_crypto *crypto, void *data,
 {
 	struct crypto_shash *tfm = crypto->secret_tfm;
 	u8 secret[TLS_CIPHER_AES_GCM_128_SECRET_SIZE];
-	struct quic_data salt, s, l, k, z = {};
+	struct quic_data salt, s, l, k;
 	int err;
 
 	quic_data(&salt, data, len);
@@ -1222,7 +1215,7 @@ static int quic_crypto_generate_key(struct quic_crypto *crypto, void *data,
 
 	quic_data(&l, label, strlen(label));
 	quic_data(&k, token, key_len);
-	err = quic_crypto_hkdf_expand(tfm, &s, &l, &z, &k);
+	err = quic_crypto_hkdf_expand(tfm, &s, &l, &k);
 out:
 	memzero_explicit(secret, sizeof(secret));
 	return err;
