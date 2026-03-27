@@ -47,7 +47,8 @@ static bool quic_stream_id_uni(s64 stream_id)
 static struct hlist_head *quic_stream_head(struct quic_stream_table *streams,
 					   s64 stream_id)
 {
-	return &streams->head[stream_id & (QUIC_STREAM_HT_SIZE - 1)];
+	/* Skip the SERVER initiator bit, which is constant per endpoint. */
+	return &streams->head[(stream_id >> 1) & (QUIC_STREAM_HT_SIZE - 1)];
 }
 
 struct quic_stream *quic_stream_find(struct quic_stream_table *streams,
