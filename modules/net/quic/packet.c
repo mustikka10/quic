@@ -2479,7 +2479,8 @@ int quic_packet_route(struct sock *sk)
 		return err < 0 ? err : 0;
 
 	packet->hlen = quic_encap_len(da);
-	pmtu = min_t(u32, dst_mtu(__sk_dst_get(sk)), QUIC_PATH_MAX_PMTU);
+	pmtu = clamp(dst_mtu(__sk_dst_get(sk)),
+		     QUIC_PATH_MIN_PMTU, QUIC_PATH_MAX_PMTU);
 	quic_packet_mss_update(sk, pmtu - packet->hlen);
 
 	quic_path_pl_reset(paths);
