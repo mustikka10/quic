@@ -1245,7 +1245,7 @@ out:
 	 * RETIRE_CONNECTION_ID frames before adding the newly provided
 	 * connection ID to the set of active connection IDs.
 	 */
-	if (prior > first) {
+	if (prior > first && prior <= quic_conn_id_last_number(id_set)) {
 		err = quic_outq_transmit_retire_conn_id(sk, prior, frame->path,
 							true);
 		if (err)
