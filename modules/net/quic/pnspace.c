@@ -124,7 +124,8 @@ int quic_pnspace_mark(struct quic_pnspace *space, s64 pn)
 {
 	s64 last_max_pn_seen;
 	u64 last_max_pn_time;
-	u16 gap;
+	bool has_gap;
+	u16 off;
 	int err;
 
 	if (space->base_pn == -1) {
@@ -141,28 +142,29 @@ int quic_pnspace_mark(struct quic_pnspace *space, s64 pn)
 	if (pn < space->base_pn)
 		return 0;
 
-	/* If gap is beyond current map length, try to grow the bitmap to
+	/* If offset is beyond current map length, try to grow the bitmap to
 	 * accommodate.
 	 */
-	gap = (u16)(pn - space->base_pn);
-	if (gap >= space->pn_map_len) {
-		err = quic_pnspace_grow(space, gap + 1);
+	off = (u16)(pn - space->base_pn);
+	if (off >= space->pn_map_len) {
+		err = quic_pnspace_grow(space, off + 1);
 		if (err)
 			return err;
 	}
 
+	has_gap = quic_pnspace_has_gap(space);
 	if (space->max_pn_seen < pn) {
 		space->max_pn_seen = pn;
 		space->max_pn_time = space->time;
 	}
 
 	if (space->base_pn == pn) { /* PN is next expected packet. */
-		if (quic_pnspace_has_gap(space)) /* Advance to next gap. */
+		if (has_gap) /* Advance to next gap. */
 			quic_pnspace_move(space, pn);
 		else /* Fast path: increment base_pn if no gaps. */
 			space->base_pn++;
 	} else { /* Mark this packet as received in the bitmap. */
-		set_bit(gap, space->pn_map);
+		set_bit(off, space->pn_map);
 	}
 
 	/* Only update min and last_max_pn_seen if this packet is the current
