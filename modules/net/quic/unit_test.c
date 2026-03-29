@@ -27,6 +27,7 @@ static void quic_pnspace_test1(struct kunit *test)
 {
 	struct quic_pnspace _space = {}, *space = &_space;
 	struct quic_gap_ack_block gabs[QUIC_PN_MAP_MAX_GABS];
+	s64 pn;
 	int i;
 
 	KUNIT_ASSERT_EQ(test, 0, quic_pnspace_init(space));
@@ -39,8 +40,6 @@ static void quic_pnspace_test1(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, space->pn_map_len, QUIC_PN_MAP_INITIAL);
 
 	KUNIT_EXPECT_EQ(test, 0, quic_pnspace_mark(space, -1));
-	KUNIT_EXPECT_EQ(test, -EINVAL,
-			quic_pnspace_mark(space, QUIC_PN_MAP_SIZE + 1));
 
 	KUNIT_EXPECT_EQ(test, 0, quic_pnspace_mark(space, 0));
 	KUNIT_EXPECT_EQ(test, 0, quic_pnspace_mark(space, 1));
@@ -153,11 +152,15 @@ static void quic_pnspace_test1(struct kunit *test)
 		KUNIT_EXPECT_EQ(test, 0,
 				quic_pnspace_mark(space, (s64)(256 * i)));
 
-	KUNIT_EXPECT_EQ(test, 0,
-			quic_pnspace_mark(space, QUIC_PN_MAP_SIZE + 1));
-	KUNIT_EXPECT_EQ(test, -EINVAL,
-			quic_pnspace_mark(space, space->base_pn +
-						 QUIC_PN_MAP_SIZE + 1));
+	pn = QUIC_PN_MAP_SIZE + 1;
+	KUNIT_EXPECT_EQ(test, 0, quic_pnspace_mark(space, pn));
+
+	pn = space->base_pn + QUIC_PN_MAP_SIZE + 1;
+	KUNIT_EXPECT_EQ(test, 0, quic_pnspace_mark(space, pn));
+	KUNIT_EXPECT_EQ(test, pn + 1, space->base_pn);
+	KUNIT_EXPECT_EQ(test, pn, space->max_pn_seen);
+	KUNIT_EXPECT_EQ(test, pn, space->last_max_pn_seen);
+	KUNIT_EXPECT_EQ(test, pn, space->min_pn_seen);
 
 	quic_pnspace_free(space);
 	KUNIT_EXPECT_EQ(test, space->pn_map_len, 0);
@@ -167,6 +170,7 @@ static void quic_pnspace_test2(struct kunit *test)
 {
 	struct quic_pnspace _space = {}, *space = &_space;
 	struct quic_gap_ack_block gabs[QUIC_PN_MAP_MAX_GABS];
+	s64 pn;
 
 	KUNIT_ASSERT_EQ(test, 0, quic_pnspace_init(space));
 	space->time = jiffies_to_usecs(jiffies);
@@ -276,9 +280,8 @@ static void quic_pnspace_test2(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, 1, quic_pnspace_check(space, 29));
 	KUNIT_EXPECT_EQ(test, 1, quic_pnspace_check(space, 19));
 	KUNIT_EXPECT_EQ(test, 0, quic_pnspace_check(space, 35));
-	KUNIT_EXPECT_EQ(test, -EINVAL,
-			quic_pnspace_check(space,
-					   space->base_pn + QUIC_PN_MAP_SIZE));
+	pn = space->base_pn + QUIC_PN_MAP_SIZE;
+	KUNIT_EXPECT_EQ(test, 0, quic_pnspace_check(space, pn));
 
 	quic_pnspace_free(space);
 	KUNIT_EXPECT_EQ(test, space->pn_map_len, 0);

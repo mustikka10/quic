@@ -53,9 +53,6 @@ static int quic_pnspace_grow(struct quic_pnspace *space, u16 size)
 	u16 len, inc, offset;
 	unsigned long *new;
 
-	if (size > QUIC_PN_MAP_SIZE)
-		return -EINVAL;
-
 	inc = ALIGN((size - space->pn_map_len), BITS_PER_LONG) +
 	      QUIC_PN_MAP_INCREMENT;
 	len = (u16)min(space->pn_map_len + inc, QUIC_PN_MAP_SIZE);
@@ -76,15 +73,14 @@ static int quic_pnspace_grow(struct quic_pnspace *space, u16 size)
 /* Check if a packet number has been received.
  *
  * Returns: 0 if the packet number has not been received.  1 if it has already
- * been received. -EINVAL if the packet number is too old or too far in the
- * future to track.
+ * been received. -EINVAL if the packet number is too old to track.
  */
 int quic_pnspace_check(struct quic_pnspace *space, s64 pn)
 {
 	if (space->base_pn == -1) /* No packet number received yet. */
 		return 0;
 
-	if (pn < space->min_pn_seen || pn >= space->base_pn + QUIC_PN_MAP_SIZE)
+	if (pn < space->min_pn_seen)
 		return -EINVAL;
 
 	if (pn < space->base_pn)
@@ -147,6 +143,10 @@ int quic_pnspace_mark(struct quic_pnspace *space, s64 pn)
 	 */
 	off = (u16)(pn - space->base_pn);
 	if (off >= space->pn_map_len) {
+		if (off >= QUIC_PN_MAP_SIZE) {
+			quic_pnspace_set_base_pn(space, pn + 1);
+			return 0;
+		}
 		err = quic_pnspace_grow(space, off + 1);
 		if (err)
 			return err;
