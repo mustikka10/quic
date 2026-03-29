@@ -229,6 +229,10 @@ int quic_path_bind(struct sock *sk, struct quic_path_group *paths, u8 path)
 		if (IS_ERR(us)) {
 			a->v4.sin_port = 0;
 			mutex_unlock(&head->lock);
+			if (PTR_ERR(us) == -EADDRINUSE) {
+				cond_resched();
+				continue;
+			}
 			return PTR_ERR(us);
 		}
 		mutex_unlock(&head->lock);
