@@ -118,10 +118,9 @@ static void quic_pnspace_move(struct quic_pnspace *space, s64 pn)
  */
 int quic_pnspace_mark(struct quic_pnspace *space, s64 pn)
 {
-	s64 last_max_pn_seen;
+	s64 last_max_pn_seen, off;
 	u64 last_max_pn_time;
 	bool has_gap;
-	u16 off;
 	int err;
 
 	if (space->base_pn == -1) {
@@ -141,9 +140,10 @@ int quic_pnspace_mark(struct quic_pnspace *space, s64 pn)
 	/* If offset is beyond current map length, try to grow the bitmap to
 	 * accommodate.
 	 */
-	off = (u16)(pn - space->base_pn);
+	off = pn - space->base_pn;
 	if (off >= space->pn_map_len) {
 		if (off >= QUIC_PN_MAP_SIZE) {
+			bitmap_zero(space->pn_map, space->pn_map_len);
 			quic_pnspace_set_base_pn(space, pn + 1);
 			return 0;
 		}
