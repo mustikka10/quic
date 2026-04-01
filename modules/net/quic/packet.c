@@ -2602,7 +2602,7 @@ static int quic_packet_bundle(struct sock *sk, struct sk_buff *skb)
 		goto init;
 
 	/* If bundling would exceed MSS, flush the current bundle. */
-	if (packet->head->len + skb->len >=
+	if (packet->head->len + skb->len >
 	    packet->mss[QUIC_PACKET_MSS_NORMAL]) {
 		quic_packet_flush(sk);
 		goto init;
