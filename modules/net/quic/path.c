@@ -301,23 +301,26 @@ void quic_path_unbind(struct sock *sk, struct quic_path_group *paths, u8 path)
 bool quic_path_detect_alt(struct quic_path_group *paths, union quic_addr *sa,
 			  union quic_addr *da, struct sock *sk)
 {
-	union quic_addr *saddr = quic_path_saddr(paths, 0);
-	union quic_addr *daddr = quic_path_daddr(paths, 0);
+	bool remote = !quic_cmp_sk_addr(sk, quic_path_daddr(paths, 0), da);
+	bool local = !quic_cmp_sk_addr(sk, quic_path_saddr(paths, 0), sa);
 
-	if ((!quic_cmp_sk_addr(sk, saddr, sa) && !paths->disable_saddr_alt) ||
-	    (!quic_cmp_sk_addr(sk, daddr, da) && !paths->disable_daddr_alt)) {
-		if (!quic_path_saddr(paths, 1)->v4.sin_port)
-			quic_path_set_saddr(paths, 1, sa);
+	if (!local && !remote)
+		return false;
 
-		if (!quic_cmp_sk_addr(sk, quic_path_saddr(paths, 1), sa))
-			return false;
+	if ((local && paths->disable_saddr_alt) ||
+	    (remote && paths->disable_daddr_alt))
+		return false;
 
-		if (!quic_path_daddr(paths, 1)->v4.sin_port)
-			quic_path_set_daddr(paths, 1, da);
+	if (!quic_path_saddr(paths, 1)->v4.sin_port)
+		quic_path_set_saddr(paths, 1, sa);
 
-		return quic_cmp_sk_addr(sk, quic_path_daddr(paths, 1), da);
-	}
-	return false;
+	if (!quic_cmp_sk_addr(sk, quic_path_saddr(paths, 1), sa))
+		return false;
+
+	if (!quic_path_daddr(paths, 1)->v4.sin_port)
+		quic_path_set_daddr(paths, 1, da);
+
+	return quic_cmp_sk_addr(sk, quic_path_daddr(paths, 1), da);
 }
 
 void quic_path_get_param(struct quic_path_group *paths,
