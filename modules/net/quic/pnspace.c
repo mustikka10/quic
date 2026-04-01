@@ -29,6 +29,7 @@ int quic_pnspace_init(struct quic_pnspace *space)
 
 	space->max_time_limit = QUIC_PNSPACE_TIME_LIMIT;
 	space->next_pn = QUIC_PNSPACE_NEXT_PN;
+	space->max_pn_acked_seen = -1;
 	space->base_pn = -1;
 	return 0;
 }
