@@ -194,6 +194,8 @@ void quic_conn_id_remove(struct quic_conn_id_set *id_set, u32 number)
 			break;
 		if (id_set->active == common)
 			id_set->active = tmp;
+		if (id_set->alt == common)
+			id_set->alt = tmp;
 		quic_conn_id_del(common);
 		id_set->count--;
 	}
