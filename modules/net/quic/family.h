@@ -48,3 +48,4 @@ int quic_common_setsockopt(struct sock *sk, int level, int optname,
 int quic_common_getsockopt(struct sock *sk, int level, int optname,
 			   char __user *optval, int __user *optlen);
 bool quic_sk_accept_pmtu(struct sock *sk);
+void quic_sk_destruct(struct sock *sk);

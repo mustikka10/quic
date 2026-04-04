@@ -659,3 +659,8 @@ bool quic_sk_accept_pmtu(struct sock *sk)
 	return quic_pf_ipv4(sk) ? ip_sk_accept_pmtu(sk) :
 				  ip6_sk_accept_pmtu(sk);
 }
+
+void quic_sk_destruct(struct sock *sk)
+{
+	quic_pf_ipv4(sk) ? inet_sock_destruct(sk) : inet6_sock_destruct(sk);
+}

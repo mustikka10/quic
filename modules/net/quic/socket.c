@@ -394,11 +394,22 @@ out:
 }
 #endif
 
+static void quic_sock_destruct(struct sock *sk)
+{
+	u8 i;
+
+	for (i = 0; i < QUIC_CRYPTO_MAX; i++)
+		quic_crypto_free(quic_crypto(sk, i));
+
+	quic_sk_destruct(sk);
+}
+
 static int quic_init_sock(struct sock *sk)
 {
 	struct quic_transport_param *p = &quic_default_param;
 	u8 i;
 
+	sk->sk_destruct = quic_sock_destruct;
 	sk->sk_write_space = quic_write_space;
 	sock_set_flag(sk, SOCK_USE_WRITE_QUEUE);
 
@@ -437,8 +448,6 @@ static void quic_destroy_sock(struct sock *sk)
 
 	for (i = 0; i < QUIC_PNSPACE_MAX; i++)
 		quic_pnspace_free(quic_pnspace(sk, i));
-	for (i = 0; i < QUIC_CRYPTO_MAX; i++)
-		quic_crypto_free(quic_crypto(sk, i));
 
 	quic_path_unbind(sk, quic_paths(sk), 0);
 	quic_path_unbind(sk, quic_paths(sk), 1);
