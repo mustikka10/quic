@@ -1097,32 +1097,34 @@ int quic_crypto_generate_token(struct quic_crypto *crypto, void *addr,
 			       u32 addrlen, struct quic_conn_id *conn_id,
 			       u8 *token, u32 *tlen)
 {
+	u8 *token_buf, *iv, *p, flag = *token;
 	u64 ts = quic_ktime_get_us();
 	struct aead_request *req;
 	struct scatterlist *sg;
-	u8 *token_buf, *iv, *p;
 	int err, len;
 
-	len = addrlen + sizeof(ts) + conn_id->len + QUIC_TAG_LEN;
+	len = sizeof(flag) + addrlen + sizeof(ts) + conn_id->len + QUIC_TAG_LEN;
 	token_buf = quic_crypto_token_init(crypto, len, &iv, &req, &sg);
 	if (IS_ERR(token_buf))
 		return PTR_ERR(token_buf);
 
 	p = token_buf;
+	p = quic_put_int(p, flag, sizeof(flag));
 	p = quic_put_data(p, addr, addrlen);
 	p = quic_put_int(p, ts, sizeof(ts));
 	quic_put_data(p, conn_id->data, conn_id->len);
 
 	sg_init_one(sg, token_buf, len);
 	aead_request_set_tfm(req, crypto->tag_tfm);
-	aead_request_set_ad(req, addrlen);
-	aead_request_set_crypt(req, sg, sg, len - addrlen - QUIC_TAG_LEN, iv);
+	aead_request_set_ad(req, sizeof(flag) + addrlen);
+	aead_request_set_crypt(req, sg, sg,
+			       len - sizeof(flag) - addrlen - QUIC_TAG_LEN, iv);
 	err = crypto_aead_encrypt(req);
 	if (err)
 		goto out;
 
-	memcpy(token + 1, token_buf, len);
-	*tlen = len + 1;
+	memcpy(token, token_buf, len);
+	*tlen = len;
 out:
 	kfree_sensitive(token_buf);
 	return err;
@@ -1145,15 +1147,13 @@ int quic_crypto_verify_token(struct quic_crypto *crypto, void *addr,
 			     u8 *token, u32 len)
 {
 	u64 t, ts = quic_ktime_get_us(), timeout = QUIC_TOKEN_TIMEOUT_RETRY;
-	u8 *token_buf, *iv, *p, flag = *token;
+	u8 *token_buf, *iv, *p, flag;
 	struct aead_request *req;
 	struct scatterlist *sg;
 	int err;
 
 	if (len < sizeof(flag) + addrlen + sizeof(ts) + QUIC_TAG_LEN)
 		return -EINVAL;
-	len--;
-	token++;
 
 	token_buf = quic_crypto_token_init(crypto, len, &iv, &req, &sg);
 	if (IS_ERR(token_buf))
@@ -1163,14 +1163,16 @@ int quic_crypto_verify_token(struct quic_crypto *crypto, void *addr,
 
 	sg_init_one(sg, token_buf, len);
 	aead_request_set_tfm(req, crypto->tag_tfm);
-	aead_request_set_ad(req, addrlen);
-	aead_request_set_crypt(req, sg, sg, len - addrlen, iv);
+	aead_request_set_ad(req, sizeof(flag) + addrlen);
+	aead_request_set_crypt(req, sg, sg, len - sizeof(flag) - addrlen, iv);
 	err = crypto_aead_decrypt(req);
 	if (err)
 		goto out;
 
 	err = -EINVAL;
 	p = token_buf;
+	flag = *p++;
+	len -= sizeof(flag);
 	if (memcmp(p, addr, addrlen))
 		goto out;
 
