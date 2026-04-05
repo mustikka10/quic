@@ -620,7 +620,7 @@ bool quic_cmp_sk_addr(struct sock *sk, union quic_addr *a,
 				  quic_v6_cmp_sk_addr(sk, a, addr);
 }
 
-int quic_get_sk_addr(struct socket *sock, struct sockaddr *a, bool peer)
+int quic_get_sk_addr(struct socket *sock, struct sockaddr *a, int peer)
 {
 	return quic_pf_ipv4(sock->sk) ? quic_v4_get_sk_addr(sock, a, peer) :
 					quic_v6_get_sk_addr(sock, a, peer);

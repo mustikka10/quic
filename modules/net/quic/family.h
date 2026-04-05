@@ -39,7 +39,7 @@ void quic_set_pref_addr(struct sock *sk, u8 *p, union quic_addr *addr);
 
 bool quic_cmp_sk_addr(struct sock *sk, union quic_addr *a,
 		      union quic_addr *addr);
-int quic_get_sk_addr(struct socket *sock, struct sockaddr *a, bool peer);
+int quic_get_sk_addr(struct socket *sock, struct sockaddr *a, int peer);
 void quic_set_sk_addr(struct sock *sk, union quic_addr *a, bool src);
 void quic_set_sk_ecn(struct sock *sk, u8 ecn);
 
