@@ -654,10 +654,10 @@ int quic_common_getsockopt(struct sock *sk, int level, int optname,
 	       ipv6_getsockopt(sk, level, optname, optval, optlen);
 }
 
-bool quic_sk_accept_pmtu(struct sock *sk)
+bool quic_sk_accept_pmtu(struct sock *sk, struct sk_buff *skb)
 {
-	return quic_pf_ipv4(sk) ? ip_sk_accept_pmtu(sk) :
-				  ip6_sk_accept_pmtu(sk);
+	return quic_skb_ipv4(skb) ? ip_sk_accept_pmtu(sk) :
+				    ip6_sk_accept_pmtu(sk);
 }
 
 void quic_sk_destruct(struct sock *sk)
