@@ -447,6 +447,8 @@ static void quic_crypto_done(void *data, int err)
 {
 	struct crypto_async_request *base = data;
 	struct sk_buff *skb = data;
+	struct quic_crypto *crypto;
+	struct quic_skb_cb *cb;
 
 	if (err == -EINPROGRESS)
 		return;
@@ -454,8 +456,12 @@ static void quic_crypto_done(void *data, int err)
 	if (base->flags == CRYPTO_TFM_REQ_MAY_BACKLOG)
 		skb = base->data;
 
-	kfree_sensitive(QUIC_SKB_CB(skb)->crypto_ctx);
-	QUIC_SKB_CB(skb)->crypto_done(skb, err);
+	cb = QUIC_SKB_CB(skb);
+	crypto = *(struct quic_crypto **)cb->crypto_ctx;
+	atomic_dec(&crypto->async_pending[cb->key_phase]);
+
+	kfree_sensitive(cb->crypto_ctx);
+	cb->crypto_done(skb, err);
 }
 
 /* AEAD Usage. */
@@ -498,7 +504,8 @@ static int quic_crypto_payload_protect(struct quic_crypto *crypto,
 		nsg = 1;
 	}
 
-	ctx = quic_crypto_aead_mem_alloc(tfm, 0, &iv, &req, &sg, nsg);
+	ctx = quic_crypto_aead_mem_alloc(tfm, sizeof(void *), &iv, &req, &sg,
+					 nsg);
 	if (!ctx)
 		return -ENOMEM;
 
@@ -533,9 +540,11 @@ static int quic_crypto_payload_protect(struct quic_crypto *crypto,
 	aead_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG,
 				  (void *)quic_crypto_done, skb);
 
+	*(struct quic_crypto **)ctx = crypto;
 	cb->crypto_ctx = ctx; /* Async free context for quic_crypto_done() */
 	err = enc ? crypto_aead_encrypt(req) : crypto_aead_decrypt(req);
 	if (err == -EINPROGRESS || err == -EBUSY) {
+		atomic_inc(&crypto->async_pending[phase]);
 		memzero_explicit(nonce, sizeof(nonce));
 		return -EINPROGRESS;
 	}
@@ -622,6 +631,9 @@ int quic_crypto_decrypt(struct quic_crypto *crypto, struct sk_buff *skb)
 			return -EINVAL;
 		if (!cb->backlog) /* Key update requires process context. */
 			return -EKEYREVOKED;
+		/* Cannot do key update while async crypto is in progress. */
+		if (unlikely(atomic_read(&crypto->async_pending[phase])))
+			return -EBUSY;
 		err = quic_crypto_key_update(crypto); /* Perform key update. */
 		if (err) {
 			cb->errcode = QUIC_TRANSPORT_ERROR_KEY_UPDATE;
