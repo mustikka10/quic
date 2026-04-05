@@ -88,7 +88,7 @@ static int quic_v4_flow_route(struct sock *sk, union quic_addr *da,
 	fl4->flowi4_uid = sk->sk_uid;
 	fl4->flowi4_mark = sk->sk_mark;
 
-	rt = ip_route_output_key(sock_net(sk), fl4);
+	rt = ip_route_output_flow(sock_net(sk), fl4, sk);
 	if (IS_ERR(rt))
 		return PTR_ERR(rt);
 
